@@ -4,15 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Review Detective** — AI 가짜 리뷰 판별기. 쿠팡/네이버 쇼핑 상품 URL을 입력하면 AI가 리뷰를 분석하여 가짜 리뷰를 판별하고, 진짜 리뷰만 기반으로 보정 평점과 장단점 요약을 제공하는 웹 서비스.
+**낚시 판별기 (Clickbait Detector)** — YouTube 영상 제목이 약속한 내용과 실제 영상 내용의 일치도를 3중 분석(자막+댓글+메타데이터)으로 판별하는 AI 웹 서비스.
+
+핵심 차별점: "낚시인지 판단해줘"를 통째로 묻지 않고, 제목의 약속(claim)을 분해 → 각각을 자막에서 검증 → 정량적 점수로 변환. "왜 이 점수인가"를 약속별로 설명 가능.
 
 OKKY 바이브 코딩 해커톤 (2026.02.21, 4시간 개발) 출품작.
 
 ## Tech Stack
 
-- **Framework**: Next.js 14 (App Router) + TypeScript
+- **Framework**: Next.js 16 (App Router) + React 19 + TypeScript
 - **Styling**: Tailwind CSS (dark mode default)
-- **Crawling**: Puppeteer + puppeteer-extra-plugin-stealth
+- **YouTube Data**: googleapis (YouTube Data API v3)
+- **Transcript**: youtube-transcript (자막 추출)
 - **AI**: Claude API (@anthropic-ai/sdk)
 - **Validation**: zod (LLM JSON 응답 스키마 검증)
 - **Concurrency**: p-limit (LLM rate-limit 보호)
@@ -30,71 +33,86 @@ npm run lint         # ESLint
 ## Environment Variables
 
 ```bash
-ANTHROPIC_API_KEY=       # Claude API 키
-ANALYZE_MAX_REVIEWS=120  # 최대 수집 리뷰 수
-LLM_BATCH_SIZE=12        # 배치당 리뷰 수
-LLM_MAX_CONCURRENCY=2    # 동시 LLM 호출 수
+ANTHROPIC_API_KEY=           # Claude API 키
+YOUTUBE_API_KEY=             # YouTube Data API v3 키
+TRANSCRIPT_MAX_LENGTH=8000   # 자막 최대 글자수 (초과 시 샘플링)
+LLM_MAX_CONCURRENCY=2       # 동시 LLM 호출 수
 ```
 
 ## Architecture
 
 ```
-URL 입력 → POST /api/analyze
-  → validate(url)
-  → crawlReviews(url, maxReviews)     — Puppeteer stealth 크롤링
-  → normalizeReviews(raw)
-  → heuristicPreScore(reviews)        — 규칙 기반 사전 점수
-  → llmBatchAnalyze(reviews)          — 배치 12개씩 Claude API 병렬 호출
-  → mergeScores + aggregate           — 가중 평균 (heuristic 20-30% + LLM 70-80%)
-  → summarizeGenuineReviews           — 진짜 리뷰 기반 요약
+YouTube URL 입력 → POST /api/analyze
+  → extractVideoId(url)
+  → 캐시 확인 (메모리)
+  → Promise.all([fetchMetadata, fetchTranscript])
+  → fetchComments
+  → Layer 1: calculateMetaScore (코드, 즉시)
+  → Layer 2: analyzeTranscript (LLM 호출 1회)
+  → Layer 3: analyzeComments (키워드 + 선택적 LLM 호출 1회)
+  → combineFinalScore (가중 합산)
   → return AnalysisResult JSON
 ```
 
 ### Key Modules
 
-- **`src/lib/crawler/`**: 플랫폼별 Puppeteer 크롤러. 단일 상품 페이지에서 리뷰를 페이지네이션으로 수집 (최대 80-120개). 크롤링 실패 시 fallback 캐시 데이터 반환.
-- **`src/lib/analyzer/`**: 2단계 분석 파이프라인.
-  - `heuristic.ts`: 규칙 기반 신호 (프로모 톤, 반복 상품명, 평점-텍스트 불일치, 너무 짧은/일반적 리뷰 등)
-  - `prompt.ts` + `batch-analyze.ts`: LLM 배치 분석. 배치 12개 단위로 `p-limit`으로 동시성 제어하며 `Promise.all` 병렬 호출.
-  - `schema.ts`: zod 스키마로 LLM JSON 응답 강제 검증. 실패 시 1회 재시도 후 heuristic-only fallback.
-  - `summarize.ts`: 진짜 리뷰(fakeScore < 70) 기반 장단점/추천대상/주의사항 요약.
-- **`src/lib/cache/memory-store.ts`**: analysisId 기준 메모리 캐시. 중복 URL 즉시 응답.
-- **`src/components/`**: 대시보드 UI 컴포넌트 — URL 입력, 로딩 상태, 평점 비교 카드, 도넛차트, 요약 카드, 개별 리뷰 리스트.
+- **`src/lib/youtube/`**: YouTube 데이터 수집
+  - `fetch-metadata.ts`: YouTube Data API v3 — 메타데이터 + 댓글 최대 100개
+  - `fetch-transcript.ts`: youtube-transcript — 자막 추출 + 긴 자막 샘플링
+- **`src/lib/analyzer/`**: 3중 분석 파이프라인
+  - `metadata-scorer.ts`: 순수 코드 — 자극적 단어, 문장부호, 이모지, 좋아요율
+  - `transcript-analyzer.ts`: LLM 1회 — 제목 약속 추출 + 자막 대조 검증
+  - `comment-analyzer.ts`: 키워드 필터링 + 선택적 LLM 1회 — 댓글 감성 분석
+  - `prompt.ts`: LLM 프롬프트 템플릿 (자막 분석, 댓글 분석)
+  - `schema.ts`: zod 스키마 (LLM JSON 응답 검증)
+  - `score-combiner.ts`: 3개 레이어 가중 합산 + verdict 결정
+- **`src/lib/cache/memory-store.ts`**: videoId 기준 메모리 캐시 (30분 TTL)
+- **`src/lib/fixtures/demo-result.ts`**: 데모용 fixture 데이터
+- **`src/components/`**: 대시보드 UI 컴포넌트
 
 ### Core Types (`src/lib/types.ts`)
 
-- `RawReview`: 크롤링 원본 (text, rating 1-5, date, reviewer, helpfulCount, isPhotoReview, badgeText)
-- `ReviewCategory`: `genuine | suspected_paid | suspected_ai | suspected_template | rating_mismatch`
-- `AnalyzedReview`: RawReview + fakeScore(0-100), category, reason, confidence(0-1), signals[]
-- `AnalysisResult`: productName, source, originalRating vs adjustedRating, fakePercentage, categoryBreakdown, summary(pros/cons/oneLiner/recommendFor/caution), reviews[]
+- `VideoMetadata`: YouTube 영상 메타데이터
+- `VideoComment`: 댓글 데이터
+- `TranscriptSegment`: 자막 세그먼트
+- `ClaimVerification`: 약속별 검증 결과 (claim, evidence, score, met)
+- `TranscriptAnalysis`: 자막 분석 결과 (claims[], overallScore, summary)
+- `CommentAnalysis`: 댓글 분석 결과 (keyword + AI)
+- `MetadataAnalysis`: 메타데이터 분석 결과
+- `AnalysisResult`: 종합 결과 (trustScore, verdict, 3개 레이어 상세)
 
-### Score Thresholds
+### Score & Verdict
 
-- `0-39`: 진짜 가능성 높음 (genuine)
-- `40-69`: 의심 (suspected)
-- `70-100`: 가짜 가능성 높음 (fake)
-- 보정 평점 = `fakeScore < 70`인 리뷰의 평균 평점 (리뷰 수 < 15이면 전체 평균과 혼합)
+- trustScore 0-100 (높을수록 신뢰)
+- `>= 70`: trustworthy (신뢰) — 초록
+- `40-69`: suspect (의심) — 노랑
+- `< 40`: clickbait (낚시) — 빨강
+
+### Weight Distribution
+
+- **3중 분석 모두 가능**: 자막 50% + 댓글 30% + 메타 20%
+- **자막 없음**: 댓글 60% + 메타 40%
+- **댓글 부족**: 자막 65% + 메타 35%
 
 ### API Contract
 
-`POST /api/analyze` — 요청: `{ url, maxReviews }` — 성공: `{ analysisId, result: AnalysisResult }` — 실패: `{ error: { code: "INVALID_URL|CRAWL_FAILED|LLM_FAILED|INTERNAL", message } }`
+`POST /api/analyze` — 요청: `{ url }` — 성공: `{ analysisId, result: AnalysisResult }` — 실패: `{ error: { code, message } }`
 
 ## Important Conventions
 
-- 크롤링은 단건(단일 URL) 방식. 대량 크롤링 절대 금지.
-- LLM 호출은 반드시 배치(12개) + `p-limit` 동시성 제어로 최적화. 리뷰 하나씩 개별 호출하지 않음.
-- LLM 프롬프트 출력은 **반드시 JSON 배열**. 마크다운/설명문/코드블록 금지. 필드: `review_index`, `fake_score`, `category`, `reason`, `confidence`, `key_signals`.
-- 가짜 리뷰를 "가짜"로 단정하지 않고 **"의심 리뷰"**로 표현. UI/프롬프트 모두 동일.
+- LLM 프롬프트 출력은 **반드시 순수 JSON**. 마크다운/코드블록 금지.
+- 낚시를 "낚시"로 단정하지 않고 **"의심"**으로 표현. UI/프롬프트 동일.
 - UI는 다크 모드 기본. 숫자는 크게, 한눈에 들어오도록.
-- 색상 의미 고정: 진짜(초록), 의심(노랑), 가짜(빨강).
+- 색상 의미 고정: 신뢰(초록 #22c55e), 의심(노랑 #eab308), 낚시(빨강 #ef4444).
 
 ## Fallback Strategy (데모 안정성)
 
 안정성 최우선. 3단계 방어:
-1. **크롤링 실패**: fixture JSON 자동 반환. 2회 연속 빈 결과 시 fixture 모드 전환.
-2. **LLM 실패**: zod 파싱 실패 → 1회 재시도(축소 응답) → heuristic-only fallback. 전체 실패율 20% 이상 시 fixture 모드 전환.
-3. **전체 실패**: fixture 결과 + "샘플 데이터 모드" 배지 표시.
+1. **YouTube API 실패**: fixture JSON 자동 반환
+2. **자막 없음**: 가중치 재분배 (댓글 60% + 메타 40%)
+3. **LLM 실패**: zod 파싱 실패 → 1회 재시도 → 메타데이터+키워드 only fallback
+4. **전체 실패**: fixture 결과 + "샘플 데이터 모드" 배지 표시
 
 ## Detailed Plan
 
-전체 구현 플랜, LLM 프롬프트 설계, UI 레이아웃, 데모 시나리오, 리스크 대응은 `PLAN.md` 참조.
+전체 구현 플랜은 `PLAN.md` 참조.

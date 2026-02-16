@@ -100,6 +100,36 @@ export interface AnalysisResult {
   source: "youtube" | "fixture";
 }
 
+// === 영상 유형 ===
+
+export type VideoType = "normal" | "music" | "live" | "shorts" | "long";
+
+export interface VideoTypeInfo {
+  type: VideoType;
+  skipTranscript: boolean; // 자막 분석 스킵 여부
+  sampleRatio: number; // 자막 샘플링 비율 (0-1)
+  reason?: string;
+}
+
+// === 검색 ===
+
+export interface SearchResultItem {
+  videoId: string;
+  title: string;
+  channelName: string;
+  channelId: string;
+  thumbnailUrl: string;
+  publishedAt: string;
+  description: string;
+  duration: string;
+  viewCount: number;
+  likeCount: number;
+  // 비동기로 채워지는 신뢰도 점수
+  trustScore?: number;
+  verdict?: Verdict;
+  analysisStatus: "pending" | "loading" | "done" | "error";
+}
+
 // === API 요청/응답 ===
 
 export interface AnalyzeRequest {
@@ -114,6 +144,22 @@ export interface AnalyzeSuccessResponse {
 export interface AnalyzeErrorResponse {
   error: {
     code: "INVALID_URL" | "FETCH_FAILED" | "LLM_FAILED" | "INTERNAL";
+    message: string;
+  };
+}
+
+export interface SearchRequest {
+  query: string;
+  maxResults?: number;
+}
+
+export interface SearchSuccessResponse {
+  results: SearchResultItem[];
+}
+
+export interface SearchErrorResponse {
+  error: {
+    code: "INVALID_QUERY" | "SEARCH_FAILED" | "INTERNAL";
     message: string;
   };
 }

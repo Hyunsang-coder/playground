@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
 import { fetchMetadata, fetchComments } from "@/lib/youtube/fetch-metadata";
 import { fetchTranscript } from "@/lib/youtube/fetch-transcript";
-import { calculateMetaScore } from "@/lib/analyzer/metadata-scorer";
-import { analyzeTranscript } from "@/lib/analyzer/transcript-analyzer";
-import { analyzeComments } from "@/lib/analyzer/comment-analyzer";
-import { combineFinalScore } from "@/lib/analyzer/score-combiner";
+import { runAnalysisPipeline } from "@/lib/analyzer/analysis-pipeline";
+import { detectVideoType } from "@/lib/analyzer/edge-cases";
 import { getCached, setCache, generateAnalysisId } from "@/lib/cache/memory-store";
 import { DEMO_RESULT } from "@/lib/fixtures/demo-result";
-import type { AnalysisResult } from "@/lib/types";
 
 function extractVideoId(url: string): string | null {
   // youtube.com/watch?v=VIDEO_ID
@@ -38,22 +35,21 @@ function extractVideoId(url: string): string | null {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { url } = body;
+    const url = body.url as string | undefined;
+    const videoIdDirect = body.videoId as string | undefined;
 
-    if (!url || typeof url !== "string") {
-      return NextResponse.json(
-        { error: { code: "INVALID_URL", message: "URL을 입력해주세요." } },
-        { status: 400 }
-      );
+    // videoId 직접 전달 또는 URL에서 추출
+    let videoId: string | null = videoIdDirect ?? null;
+    if (!videoId && url) {
+      videoId = extractVideoId(url);
     }
 
-    const videoId = extractVideoId(url);
     if (!videoId) {
       return NextResponse.json(
         {
           error: {
             code: "INVALID_URL",
-            message: "유효한 YouTube URL이 아닙니다. youtube.com 또는 youtu.be 링크를 입력해주세요.",
+            message: "유효한 YouTube URL 또는 videoId를 입력해주세요.",
           },
         },
         { status: 400 }
@@ -69,17 +65,19 @@ export async function POST(request: Request) {
       });
     }
 
-    // 데이터 수집 (병렬)
+    // 데이터 수집
     let metadata;
     let comments;
     let transcript;
 
     try {
-      [metadata, transcript] = await Promise.all([
-        fetchMetadata(videoId),
-        fetchTranscript(videoId),
+      metadata = await fetchMetadata(videoId);
+      const videoTypeInfo = detectVideoType(metadata);
+
+      [transcript, comments] = await Promise.all([
+        fetchTranscript(videoId, videoTypeInfo),
+        fetchComments(videoId),
       ]);
-      comments = await fetchComments(videoId);
     } catch (e) {
       console.error("Data fetch failed, using fixture:", e);
       return NextResponse.json({
@@ -88,53 +86,8 @@ export async function POST(request: Request) {
       });
     }
 
-    // 3중 분석 (메타데이터는 즉시, LLM 호출은 병렬)
-    const metadataAnalysis = calculateMetaScore(metadata);
-
-    let transcriptAnalysis;
-    let commentAnalysis;
-
-    try {
-      [transcriptAnalysis, commentAnalysis] = await Promise.all([
-        transcript ? analyzeTranscript(metadata.title, transcript) : Promise.resolve(null),
-        comments.length > 0
-          ? analyzeComments(metadata.title, comments)
-          : Promise.resolve(null),
-      ]);
-    } catch (e) {
-      console.error("Analysis failed, falling back to metadata only:", e);
-      transcriptAnalysis = null;
-      commentAnalysis = null;
-    }
-
-    // 종합 점수 계산
-    const combined = combineFinalScore(
-      transcriptAnalysis,
-      commentAnalysis,
-      metadataAnalysis
-    );
-
-    const result: AnalysisResult = {
-      videoId,
-      title: metadata.title,
-      channelName: metadata.channelName,
-      thumbnailUrl: metadata.thumbnailUrl,
-
-      trustScore: combined.trustScore,
-      clickbaitRisk: combined.clickbaitRisk,
-      verdict: combined.verdict,
-
-      transcriptAnalysis,
-      commentAnalysis,
-      metadataAnalysis,
-
-      analysisMode: combined.analysisMode,
-      weights: combined.weights,
-
-      summary: buildSummary(combined.verdict, transcriptAnalysis?.summary),
-
-      source: "youtube",
-    };
+    // 분석 파이프라인 실행
+    const result = await runAnalysisPipeline(metadata, transcript, comments);
 
     // 캐시 저장
     setCache(videoId, result);
@@ -154,23 +107,5 @@ export async function POST(request: Request) {
       },
       { status: 500 }
     );
-  }
-}
-
-function buildSummary(
-  verdict: string,
-  transcriptSummary?: string | null
-): string {
-  if (transcriptSummary) return transcriptSummary;
-
-  switch (verdict) {
-    case "trustworthy":
-      return "이 영상의 제목은 실제 내용과 대체로 일치합니다. 신뢰할 수 있는 콘텐츠입니다.";
-    case "suspect":
-      return "이 영상의 제목은 일부 과장이 있을 수 있습니다. 내용을 직접 확인하는 것을 권장합니다.";
-    case "clickbait":
-      return "이 영상의 제목은 실제 내용과 상당한 차이가 있을 수 있습니다. 주의가 필요합니다.";
-    default:
-      return "분석이 완료되었습니다.";
   }
 }

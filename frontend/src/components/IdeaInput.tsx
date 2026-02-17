@@ -38,7 +38,7 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
           onChange={(e) => setIdea(e.target.value)}
           placeholder="아이디어를 한 줄로 입력하세요..."
           rows={2}
-          className="w-full resize-none rounded-2xl border border-gray-700 bg-gray-900 px-6 py-4 text-xl text-gray-100 placeholder-gray-500 outline-none transition-colors focus:border-kill/50 focus:ring-2 focus:ring-kill/20"
+          className="w-full resize-none rounded-2xl border border-gray-700 bg-gray-900 px-4 sm:px-6 py-4 text-lg sm:text-xl text-gray-100 placeholder-gray-500 outline-none transition-colors focus:border-kill/50 focus:ring-2 focus:ring-kill/20"
           disabled={isLoading}
         />
       </div>
@@ -59,7 +59,7 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
       </div>
 
       {/* Mode selector */}
-      <div className="flex gap-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
         {MODES.map((m) => {
           const Icon = m.icon;
           return (
@@ -67,16 +67,16 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
               key={m.value}
               type="button"
               onClick={() => setMode(m.value)}
-              className={`flex flex-1 items-center gap-2 rounded-xl border px-4 py-3 text-sm transition-all ${
+              className={`flex items-center gap-1.5 sm:gap-2 rounded-xl border px-2.5 sm:px-4 py-3 text-sm transition-all ${
                 mode === m.value
                   ? "border-kill/50 bg-kill/10 text-kill"
                   : "border-gray-700 text-gray-400 hover:border-gray-500"
               }`}
             >
-              <Icon className="h-4 w-4" />
-              <div className="text-left">
-                <div className="font-semibold">{m.label}</div>
-                <div className="text-xs opacity-70">{m.desc}</div>
+              <Icon className="h-4 w-4 shrink-0" />
+              <div className="text-left min-w-0">
+                <div className="font-semibold truncate">{m.label}</div>
+                <div className="text-xs opacity-70 truncate hidden sm:block">{m.desc}</div>
               </div>
             </button>
           );
@@ -87,7 +87,7 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
       <button
         type="submit"
         disabled={!idea.trim() || isLoading}
-        className="flex w-full items-center justify-center gap-3 rounded-2xl bg-kill px-8 py-4 text-xl font-bold text-white transition-all hover:bg-red-600 disabled:opacity-40 disabled:hover:bg-kill"
+        className="flex w-full items-center justify-center gap-3 rounded-2xl bg-kill px-6 sm:px-8 py-3.5 sm:py-4 text-lg sm:text-xl font-bold text-white transition-all hover:bg-red-600 disabled:opacity-40 disabled:hover:bg-kill"
       >
         <Search className="h-6 w-6" />
         {isLoading ? "분석 중..." : "이 아이디어를 죽여줘"}

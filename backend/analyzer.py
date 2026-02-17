@@ -14,47 +14,106 @@ class IdeaAnalyzer:
     async def analyze(self, idea: str, mode: str) -> AsyncGenerator[dict, None]:
         """Main analysis pipeline — streams SSE events step by step."""
 
-        # Step 1: Web search for competitors
-        yield {"event": "step_start", "data": {"step": 1, "title": "경쟁 제품 탐색", "description": "웹에서 유사 서비스를 검색하고 있습니다..."}}
+        # Pre-step: AI generates optimized search queries
+        search_queries = await self._generate_search_queries(idea)
+
+        # Step 1: Web search for competitors (using AI-optimized queries)
+        web_queries_display = " / ".join(search_queries.get("web_queries", [idea])[:2])
+        yield {"event": "step_start", "data": {"step": 1, "title": "경쟁 제품 탐색", "description": f"AI 최적화 키워드로 검색 중: {web_queries_display}"}}
         await asyncio.sleep(0.3)
 
-        competitors = await self._search_web(idea)
+        competitors = await self._search_web(idea, search_queries.get("web_queries", []))
         yield {"event": "step_result", "data": {"step": 1, "result": competitors}}
 
-        # Step 2: GitHub search for similar projects
-        yield {"event": "step_start", "data": {"step": 2, "title": "GitHub 유사 프로젝트 탐색", "description": "오픈소스 프로젝트를 검색하고 있습니다..."}}
+        # Step 2: GitHub search for similar projects (using AI-optimized queries)
+        gh_query_display = search_queries.get("github_query", idea)
+        yield {"event": "step_start", "data": {"step": 2, "title": "GitHub 유사 프로젝트 탐색", "description": f"AI 최적화 키워드로 검색 중: {gh_query_display}"}}
         await asyncio.sleep(0.3)
 
-        github_results = await self._search_github(idea)
+        github_results = await self._search_github(idea, search_queries.get("github_query", ""))
         yield {"event": "step_result", "data": {"step": 2, "result": github_results}}
 
-        # Step 3: Technical feasibility analysis (LLM)
+        # Step 3: Technical feasibility analysis (LLM with streaming)
         yield {"event": "step_start", "data": {"step": 3, "title": "기술 실현성 분석", "description": "AI가 기술적 구현 가능성을 분석하고 있습니다..."}}
         await asyncio.sleep(0.3)
 
-        feasibility = await self._analyze_feasibility(idea, mode, competitors, github_results)
+        feasibility = None
+        async for event in self._stream_feasibility(idea, mode, competitors, github_results):
+            if event["type"] == "progress":
+                yield {"event": "step_progress", "data": {"step": 3, "text": event["text"]}}
+            else:
+                feasibility = event["result"]
         yield {"event": "step_result", "data": {"step": 3, "result": feasibility}}
 
-        # Step 4: Differentiation analysis
+        # Step 4: Differentiation analysis (LLM with streaming)
         yield {"event": "step_start", "data": {"step": 4, "title": "차별화 분석", "description": "기존 제품 대비 차별점을 분석하고 있습니다..."}}
         await asyncio.sleep(0.3)
 
-        differentiation = await self._analyze_differentiation(idea, competitors, github_results)
+        differentiation = None
+        async for event in self._stream_differentiation(idea, competitors, github_results):
+            if event["type"] == "progress":
+                yield {"event": "step_progress", "data": {"step": 4, "text": event["text"]}}
+            else:
+                differentiation = event["result"]
         yield {"event": "step_result", "data": {"step": 4, "result": differentiation}}
 
-        # Step 5: Final verdict
+        # Step 5: Final verdict (LLM with streaming)
         yield {"event": "step_start", "data": {"step": 5, "title": "종합 판정", "description": "최종 리포트를 생성하고 있습니다..."}}
         await asyncio.sleep(0.3)
 
-        verdict = await self._generate_verdict(idea, mode, competitors, github_results, feasibility, differentiation)
+        verdict = None
+        async for event in self._stream_verdict(idea, mode, competitors, github_results, feasibility, differentiation):
+            if event["type"] == "progress":
+                yield {"event": "step_progress", "data": {"step": 5, "text": event["text"]}}
+            else:
+                verdict = event["result"]
         yield {"event": "step_result", "data": {"step": 5, "result": verdict}}
 
         yield {"event": "done", "data": {"message": "분석 완료"}}
 
-    async def _search_web(self, idea: str) -> dict:
-        """Search web for competitors using Tavily API."""
+    async def _generate_search_queries(self, idea: str) -> dict:
+        """Use Claude to generate optimized search queries from the idea."""
+        if not self.anthropic_client:
+            return {"web_queries": [f"{idea} tool service app", f"{idea} alternative competitor"], "github_query": idea}
+
+        prompt = f"""사용자의 아이디어를 기반으로 경쟁 제품과 유사 프로젝트를 찾기 위한 최적의 검색 키워드를 생성하세요.
+
+아이디어: {idea}
+
+반드시 순수 JSON으로만 응답하세요:
+
+{{
+  "web_queries": ["영어 웹 검색 쿼리 1", "영어 웹 검색 쿼리 2"],
+  "github_query": "GitHub 검색에 최적화된 영어 키워드 (공백 구분)"
+}}
+
+규칙:
+- web_queries: 정확히 2개의 영어 검색 쿼리. 첫 번째는 일반 검색, 두 번째는 경쟁 제품 검색
+- github_query: GitHub 저장소 검색에 적합한 영어 키워드 (2~4단어)
+- 핵심 기술과 도메인을 반영할 것"""
+
+        try:
+            response = await self.anthropic_client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=256,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = response.content[0].text.strip()
+            result = self._parse_json_safe(text, {})
+            if "web_queries" in result and "github_query" in result:
+                return result
+        except Exception:
+            pass
+
+        return {"web_queries": [f"{idea} tool service app", f"{idea} alternative competitor"], "github_query": idea}
+
+    async def _search_web(self, idea: str, ai_queries: list[str] | None = None) -> dict:
+        """Search web for competitors using Tavily API with AI-optimized queries."""
         if not self.tavily_api_key:
             return {"competitors": [], "summary": "검색 API 키가 설정되지 않았습니다.", "raw_count": 0}
+
+        query1 = ai_queries[0] if ai_queries and len(ai_queries) > 0 else f"{idea} tool service app"
+        query2 = ai_queries[1] if ai_queries and len(ai_queries) > 1 else f"{idea} alternative competitor similar"
 
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
@@ -63,7 +122,7 @@ class IdeaAnalyzer:
                     "https://api.tavily.com/search",
                     json={
                         "api_key": self.tavily_api_key,
-                        "query": f"{idea} tool service app",
+                        "query": query1,
                         "max_results": 8,
                         "search_depth": "basic",
                     },
@@ -83,7 +142,7 @@ class IdeaAnalyzer:
                     "https://api.tavily.com/search",
                     json={
                         "api_key": self.tavily_api_key,
-                        "query": f"{idea} alternative competitor similar",
+                        "query": query2,
                         "max_results": 5,
                         "search_depth": "basic",
                     },
@@ -107,15 +166,15 @@ class IdeaAnalyzer:
         except Exception as e:
             return {"competitors": [], "summary": f"검색 중 오류: {str(e)}", "raw_count": 0}
 
-    async def _search_github(self, idea: str) -> dict:
-        """Search GitHub for similar projects."""
+    async def _search_github(self, idea: str, ai_query: str = "") -> dict:
+        """Search GitHub for similar projects with AI-optimized query."""
         try:
             headers = {"Accept": "application/vnd.github.v3+json"}
             if self.github_token:
                 headers["Authorization"] = f"token {self.github_token}"
 
-            # Build search query from idea
-            query = idea.replace(" ", "+")
+            # Use AI-generated query or fall back to raw idea
+            query = (ai_query or idea).replace(" ", "+")
 
             async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.get(
@@ -143,18 +202,61 @@ class IdeaAnalyzer:
         except Exception as e:
             return {"repos": [], "total_count": 0, "summary": f"GitHub 검색 중 오류: {str(e)}"}
 
-    async def _analyze_feasibility(self, idea: str, mode: str, competitors: dict, github_results: dict) -> dict:
-        """Use Claude to analyze technical feasibility."""
+    async def _call_claude_stream(self, prompt: str, fallback: dict, max_tokens: int = 1024) -> AsyncGenerator[dict, None]:
+        """Call Claude with streaming, yielding progress events and final result."""
         if not self.anthropic_client:
-            return self._fallback_feasibility(idea)
+            yield {"type": "result", "result": fallback}
+            return
 
+        try:
+            collected_text = ""
+            char_count = 0
+            async with self.anthropic_client.messages.stream(
+                model="claude-sonnet-4-20250514",
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}],
+            ) as stream:
+                async for text in stream.text_stream:
+                    collected_text += text
+                    char_count += len(text)
+                    # Emit progress every ~80 chars
+                    if char_count >= 80:
+                        char_count = 0
+                        yield {"type": "progress", "text": f"AI 응답 생성 중... ({len(collected_text)}자)"}
+
+            result = self._parse_json_safe(collected_text.strip(), fallback)
+            yield {"type": "result", "result": result}
+        except Exception:
+            yield {"type": "result", "result": fallback}
+
+    async def _stream_feasibility(self, idea: str, mode: str, competitors: dict, github_results: dict) -> AsyncGenerator[dict, None]:
+        """Stream feasibility analysis."""
+        fallback = self._fallback_feasibility(idea)
+        prompt = self._build_feasibility_prompt(idea, mode, competitors, github_results)
+        async for event in self._call_claude_stream(prompt, fallback):
+            yield event
+
+    async def _stream_differentiation(self, idea: str, competitors: dict, github_results: dict) -> AsyncGenerator[dict, None]:
+        """Stream differentiation analysis."""
+        fallback = self._fallback_differentiation(idea, competitors, github_results)
+        prompt = self._build_differentiation_prompt(idea, competitors, github_results)
+        async for event in self._call_claude_stream(prompt, fallback):
+            yield event
+
+    async def _stream_verdict(self, idea: str, mode: str, competitors: dict, github_results: dict, feasibility: dict, differentiation: dict) -> AsyncGenerator[dict, None]:
+        """Stream verdict generation."""
+        fallback = self._fallback_verdict(feasibility, differentiation)
+        prompt = self._build_verdict_prompt(idea, mode, competitors, github_results, feasibility, differentiation)
+        async for event in self._call_claude_stream(prompt, fallback):
+            yield event
+
+    def _build_feasibility_prompt(self, idea: str, mode: str, competitors: dict, github_results: dict) -> str:
         mode_context = {
             "hackathon": "4시간 해커톤 (1인 개발자)",
             "startup": "초기 스타트업 (3-5명 팀, 3개월)",
             "sideproject": "사이드 프로젝트 (1-2명, 주말 개발)",
         }
-
-        prompt = f"""당신은 기술 실현성을 냉정하게 분석하는 시니어 개발자입니다.
+        return f"""당신은 기술 실현성을 냉정하게 분석하는 시니어 개발자입니다.
 
 아이디어: {idea}
 개발 환경: {mode_context.get(mode, mode_context["hackathon"])}
@@ -175,23 +277,7 @@ GitHub 유사 프로젝트: {github_results.get("total_count", 0)}개
   "summary": "한줄 종합 판단"
 }}"""
 
-        try:
-            response = await self.anthropic_client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=1024,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            text = response.content[0].text.strip()
-            # Try to parse JSON from response
-            return self._parse_json_safe(text, self._fallback_feasibility(idea))
-        except Exception as e:
-            return self._fallback_feasibility(idea)
-
-    async def _analyze_differentiation(self, idea: str, competitors: dict, github_results: dict) -> dict:
-        """Use Claude to analyze differentiation."""
-        if not self.anthropic_client:
-            return self._fallback_differentiation(idea, competitors, github_results)
-
+    def _build_differentiation_prompt(self, idea: str, competitors: dict, github_results: dict) -> str:
         competitor_list = "\n".join(
             [f"- {c['title']}: {c['snippet']}" for c in competitors.get("competitors", [])[:5]]
         ) or "발견된 경쟁 제품 없음"
@@ -200,7 +286,7 @@ GitHub 유사 프로젝트: {github_results.get("total_count", 0)}개
             [f"- {r['name']} (⭐{r['stars']}): {r['description']}" for r in github_results.get("repos", [])[:5]]
         ) or "발견된 유사 프로젝트 없음"
 
-        prompt = f"""당신은 Devil's Advocate입니다. 아이디어의 차별화 가능성을 냉정하게 분석하세요.
+        return f"""당신은 Devil's Advocate입니다. 아이디어의 차별화 가능성을 냉정하게 분석하세요.
 
 아이디어: {idea}
 
@@ -224,23 +310,8 @@ GitHub 유사 프로젝트:
   "summary": "한줄 종합"
 }}"""
 
-        try:
-            response = await self.anthropic_client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=1024,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            text = response.content[0].text.strip()
-            return self._parse_json_safe(text, self._fallback_differentiation(idea, competitors, github_results))
-        except Exception:
-            return self._fallback_differentiation(idea, competitors, github_results)
-
-    async def _generate_verdict(self, idea: str, mode: str, competitors: dict, github_results: dict, feasibility: dict, differentiation: dict) -> dict:
-        """Generate final verdict using Claude."""
-        if not self.anthropic_client:
-            return self._fallback_verdict(feasibility, differentiation)
-
-        prompt = f"""당신은 해커톤 아이디어 심판관입니다. 모든 분석 결과를 종합하여 최종 판정을 내리세요.
+    def _build_verdict_prompt(self, idea: str, mode: str, competitors: dict, github_results: dict, feasibility: dict, differentiation: dict) -> str:
+        return f"""당신은 해커톤 아이디어 심판관입니다. 모든 분석 결과를 종합하여 최종 판정을 내리세요.
 
 아이디어: {idea}
 모드: {mode}
@@ -275,17 +346,6 @@ GitHub 유사 프로젝트:
   "recommendation": "구체적 추천 행동",
   "alternative_ideas": ["대안 1", "대안 2", "대안 3"]
 }}"""
-
-        try:
-            response = await self.anthropic_client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=1024,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            text = response.content[0].text.strip()
-            return self._parse_json_safe(text, self._fallback_verdict(feasibility, differentiation))
-        except Exception:
-            return self._fallback_verdict(feasibility, differentiation)
 
     def _parse_json_safe(self, text: str, fallback: dict) -> dict:
         """Safely parse JSON from LLM response."""

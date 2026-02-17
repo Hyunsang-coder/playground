@@ -34,12 +34,12 @@ export default function DifferentiationCard({ data }: Props) {
             <Swords className="h-4 w-4" /> 기존 솔루션
           </h4>
           {data.existing_solutions.map((s, i) => (
-            <div key={i} className="flex items-center justify-between rounded-lg border border-gray-800 p-3">
-              <div>
+            <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 rounded-lg border border-gray-800 p-3">
+              <div className="min-w-0">
                 <span className="font-medium">{s.name}</span>
                 <span className="ml-2 text-sm text-gray-500">— {s.weakness}</span>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 shrink-0">
                 <span className="text-xs text-gray-500">유사도</span>
                 <span className={`font-mono font-bold ${s.similarity > 70 ? "text-kill" : s.similarity > 40 ? "text-pivot" : "text-go"}`}>
                   {s.similarity}%

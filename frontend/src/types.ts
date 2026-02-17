@@ -82,4 +82,5 @@ export interface AnalysisStep {
   description: string;
   status: StepStatus;
   result?: unknown;
+  progressText?: string;
 }

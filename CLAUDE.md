@@ -49,7 +49,7 @@ GITHUB_TOKEN=                # GitHub API 토큰 (선택, rate limit 완화)
 아이디어 입력 → POST /api/analyze (SSE 스트리밍)
   → Step 1: 웹 검색 (Claude web_search) — 경쟁 제품 탐색
   → Step 2: GitHub 검색 — 유사 오픈소스 프로젝트
-  → Step 3: AI 기술 실현성 분석 (Claude)
+  → Step 3: AI 기술 실현성 분석 (Claude web_search + 분석) — API 가용성/크롤링 가능 여부 검증 포함
   → Step 4: AI 차별화 분석 (Claude)
   → Step 5: 종합 판정 생성 (Claude)
   → SSE events: step_start → step_result → done
@@ -61,7 +61,7 @@ GITHUB_TOKEN=                # GitHub API 토큰 (선택, rate limit 완화)
 - **`backend/analyzer.py`**: 5단계 분석 파이프라인
   - `_search_web()`: Claude web_search 경쟁 제품 검색
   - `_search_github()`: GitHub API 유사 프로젝트 검색
-  - `_analyze_feasibility()`: Claude 기술 실현성 분석
+  - `_analyze_feasibility()`: Claude 기술 실현성 분석 (web_search로 API 가용성/크롤링 가능 여부 실시간 검증)
   - `_analyze_differentiation()`: Claude 차별화 + Devil's Advocate
   - `_generate_verdict()`: 종합 판정 GO/PIVOT/KILL
 - **`frontend/src/useAnalysis.ts`**: SSE 스트리밍 파싱 훅

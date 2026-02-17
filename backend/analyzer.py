@@ -355,13 +355,17 @@ class IdeaAnalyzer:
 유사 GitHub 프로젝트 기술 스택:
 {github_context or "발견된 유사 프로젝트 없음"}
 
-다음을 구체적으로 분석하세요:
-1. 핵심 기능 분해: 이 아이디어를 구현하려면 어떤 기능 모듈이 필요한지
-2. 기술 스택: 각 모듈에 필요한 구체적 기술/API/라이브러리
-3. 구현 난이도: 각 기술의 실제 사용 가능 여부와 난이도
-4. 시간 제약 대비 실현성: 주어진 {MODE_TIME_CONSTRAINTS.get(mode, "4시간")} 안에 MVP가 가능한지
-5. 외부 API 의존도: 외부 API 의존 수준과 대안 여부
-6. 필요 스킬 레벨: 어느 수준의 개발자가 필요한지
+반드시 아래 절차를 따르세요:
+
+1. 이 아이디어를 구현하는 데 필요한 핵심 외부 API와 데이터 소스를 파악하세요.
+2. 웹 검색을 통해 각 API/데이터 소스를 직접 확인하세요:
+   - API가 실제로 존재하는지, 현재 서비스 중인지
+   - 무료 티어 또는 합리적 가격대가 있는지
+   - rate limit, 인증 요구사항, 지역 제한 등 제약 조건
+   - API가 없으면 웹 크롤링/스크래핑으로 대체 가능한지 (robots.txt, 동적 렌더링 여부)
+3. 검색 결과를 바탕으로 기술 실현성을 종합 평가하세요:
+   - 핵심 기능 분해, 구현 난이도, 시간 제약 대비 가능성
+   - 필요 스킬 레벨
 
 반드시 순수 JSON으로만 응답하세요:
 
@@ -375,7 +379,10 @@ class IdeaAnalyzer:
     {{"step": "구현 단계명", "estimated_hours": 0.5, "complexity": "low" | "medium" | "high", "description": "구체적 설명"}}
   ],
   "required_apis": [
-    {{"name": "API명", "purpose": "용도", "free_tier": true/false, "rate_limit_concern": true/false, "alternative": "대안 API"}}
+    {{"name": "API명", "purpose": "용도", "free_tier": true/false, "rate_limit_concern": true/false, "alternative": "대안 API", "verified": true/false, "status": "available" | "deprecated" | "paid_only" | "restricted" | "not_found"}}
+  ],
+  "data_accessibility": [
+    {{"source": "데이터 소스명", "method": "api" | "crawling" | "scraping" | "manual", "feasible": true/false, "note": "크롤링 가능 여부, robots.txt 제한, 동적 렌더링 문제 등"}}
   ],
   "complexity_breakdown": {{
     "frontend": "low" | "medium" | "high",
@@ -395,10 +402,19 @@ class IdeaAnalyzer:
             response = await self.anthropic_client.messages.create(
                 model="claude-sonnet-4-20250514",
                 max_tokens=2048,
+                tools=[{
+                    "type": "web_search_20250305",
+                    "name": "web_search",
+                    "max_uses": 5,
+                }],
                 messages=[{"role": "user", "content": prompt}],
             )
-            text = response.content[0].text.strip()
-            result = self._parse_json_safe(text, self._fallback_feasibility(idea, mode, github_results))
+            text_parts = []
+            for block in response.content:
+                if block.type == "text":
+                    text_parts.append(block.text)
+            full_text = "\n".join(text_parts).strip()
+            result = self._parse_json_safe(full_text, self._fallback_feasibility(idea, mode, github_results))
             return self._validate_feasibility(result)
         except Exception:
             return self._fallback_feasibility(idea, mode, github_results)
@@ -516,6 +532,8 @@ GitHub 유사 프로젝트 ({github_results.get("total_count", 0)}개 발견):
 - 필요 스킬: {feasibility.get("skill_level", "unknown")}
 - 핵심 리스크: {json.dumps(feasibility.get("key_risks", []), ensure_ascii=False)}
 - 복잡도: {json.dumps(feasibility.get("complexity_breakdown", {}), ensure_ascii=False)}
+- API 가용성: {json.dumps(feasibility.get("required_apis", []), ensure_ascii=False)}
+- 데이터 접근성: {json.dumps(feasibility.get("data_accessibility", []), ensure_ascii=False)}
 
 [차별화]
 - 경쟁 점수: {differentiation.get("competition_score", 50)}/100
@@ -583,6 +601,7 @@ GitHub 유사 프로젝트 ({github_results.get("total_count", 0)}개 발견):
         data.setdefault("key_risks", [])
         data.setdefault("implementation_steps", [])
         data.setdefault("required_apis", [])
+        data.setdefault("data_accessibility", [])
         data.setdefault("complexity_breakdown", {})
         data.setdefault("time_estimate", "알 수 없음")
         data.setdefault("time_feasible", data["score"] >= 50)
@@ -726,6 +745,7 @@ GitHub 유사 프로젝트 ({github_results.get("total_count", 0)}개 발견):
             "tech_requirements": [],
             "implementation_steps": [],
             "required_apis": [],
+            "data_accessibility": [],
             "complexity_breakdown": {},
             "key_risks": ["LLM 분석 실패 — fallback 데이터입니다"],
             "time_estimate": MODE_TIME_CONSTRAINTS.get(mode, "알 수 없음"),

@@ -1,11 +1,12 @@
 import os
 import json
 import asyncio
+from typing import Literal
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from analyzer import IdeaAnalyzer
 
@@ -21,10 +22,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+VALID_MODES = {"hackathon", "startup", "sideproject"}
+
 
 class AnalyzeRequest(BaseModel):
     idea: str
-    mode: str = "hackathon"  # "hackathon" | "startup" | "sideproject"
+    mode: str = "hackathon"
+
+    @field_validator("idea")
+    @classmethod
+    def idea_not_empty(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("아이디어를 입력해주세요.")
+        if len(v) > 500:
+            raise ValueError("아이디어는 500자 이내로 입력해주세요.")
+        return v
+
+    @field_validator("mode")
+    @classmethod
+    def mode_valid(cls, v: str) -> str:
+        if v not in VALID_MODES:
+            raise ValueError(f"유효하지 않은 모드입니다. ({', '.join(VALID_MODES)})")
+        return v
 
 
 @app.post("/api/analyze")

@@ -62,12 +62,21 @@ export function useAnalysis() {
                     status: "loading",
                   },
                 ]);
+              } else if (data.step !== undefined && data.text && !data.result) {
+                // step_progress event
+                setSteps((prev) =>
+                  prev.map((s) =>
+                    s.step === data.step
+                      ? { ...s, progressText: data.text }
+                      : s
+                  )
+                );
               } else if (data.step !== undefined && data.result) {
                 // step_result event
                 setSteps((prev) =>
                   prev.map((s) =>
                     s.step === data.step
-                      ? { ...s, status: "done" as const, result: data.result }
+                      ? { ...s, status: "done" as const, result: data.result, progressText: undefined }
                       : s
                   )
                 );

@@ -1,4 +1,3 @@
-import type { LucideProps } from "lucide-react";
 import { CheckCircle2, Loader2, Circle, Globe, Github, Brain, Swords, Gavel } from "lucide-react";
 import type { AnalysisStep } from "../types";
 import CompetitorList from "./CompetitorList";
@@ -7,11 +6,10 @@ import FeasibilityCard from "./FeasibilityCard";
 import DifferentiationCard from "./DifferentiationCard";
 import VerdictCard from "./VerdictCard";
 
-type LucideIcon = React.FC<LucideProps>;
-const STEP_ICONS: LucideIcon[] = [Globe, Github, Brain, Swords, Gavel];
-
 interface Props {
   step: AnalysisStep;
+  idea?: string;
+  onReanalyze?: (idea: string) => void;
 }
 
 function StepIcon({ stepNum, className }: { stepNum: number; className: string }) {
@@ -31,7 +29,7 @@ function StatusBadge({ status }: { status: string }) {
   return <Circle className="h-5 w-5 text-gray-600" />;
 }
 
-export default function StepCard({ step }: Props) {
+export default function StepCard({ step, idea, onReanalyze }: Props) {
   return (
     <div className="step-card animate-slide-up">
       {/* Header */}
@@ -66,13 +64,16 @@ export default function StepCard({ step }: Props) {
           {step.step === 2 && <GitHubList data={step.result as any} />}
           {step.step === 3 && <FeasibilityCard data={step.result as any} />}
           {step.step === 4 && <DifferentiationCard data={step.result as any} />}
-          {step.step === 5 && <VerdictCard data={step.result as any} />}
+          {step.step === 5 && <VerdictCard data={step.result as any} idea={idea} onReanalyze={onReanalyze} />}
         </div>
       ) : null}
 
       {/* Loading skeleton */}
       {step.status === "loading" && (
         <div className="mt-4 space-y-3">
+          {step.progressText && (
+            <div className="text-sm text-pivot animate-pulse">{step.progressText}</div>
+          )}
           <div className="h-4 w-3/4 animate-pulse rounded bg-gray-800" />
           <div className="h-4 w-1/2 animate-pulse rounded bg-gray-800" />
           <div className="h-4 w-2/3 animate-pulse rounded bg-gray-800" />

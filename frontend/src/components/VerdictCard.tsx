@@ -70,7 +70,7 @@ export default function VerdictCard({ data, idea, onReanalyze }: Props) {
 
   const handleCopy = async () => {
     const text = [
-      `${config.emoji} KillMyIdea 판정: ${data.verdict} (${data.overall_score}/100)`,
+      `${config.emoji} Valid8 판정: ${data.verdict} (${data.overall_score}/100)`,
       idea ? `\n아이디어: ${idea}` : "",
       `\n${data.one_liner}`,
       `\n점수 상세:`,

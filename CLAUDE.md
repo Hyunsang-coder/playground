@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**KillMyIdea** — AI web service that ruthlessly validates hackathon ideas.
+**Valid8** — AI web service that ruthlessly validates hackathon ideas.
 
 Performs web search (competitors) + GitHub search (similar projects) + AI analysis (technical feasibility / differentiation) through a 5-step pipeline, delivering a final GO / PIVOT / KILL verdict.
 
@@ -45,7 +45,7 @@ Built for the OKKY Vibe Coding Hackathon (2026.02.21, 4-hour development window)
         ├── types.ts           # All TypeScript interfaces for API data shapes
         ├── useAnalysis.ts     # Custom hook — SSE stream parsing + state management
         └── components/
-            ├── Header.tsx           # App title with skull icon
+            ├── Header.tsx           # App title with shield-check icon
             ├── IdeaInput.tsx        # Idea textarea + mode selector + example chips
             ├── StepCard.tsx         # Step wrapper with icon/status/loading skeleton
             ├── CompetitorList.tsx   # Step 1 result — web competitor cards
@@ -104,6 +104,7 @@ User input → POST /api/analyze { idea, mode } → SSE streaming response
 - `POST /api/analyze`: SSE endpoint, accepts `{ idea: str, mode: str }`, streams events
 - `GET /health`: Health check endpoint returning `{ status: "ok" }`
 - CORS configured with permissive `allow_origins=["*"]`
+- Request validation: `idea` max 500 characters, `mode` must be one of `hackathon`/`startup`/`sideproject`
 - Creates a new `IdeaAnalyzer` instance per request with env-based API keys
 
 **`backend/analyzer.py`** — `IdeaAnalyzer` class:
@@ -155,7 +156,7 @@ All API response shapes are typed:
 - `FeasibilityResult` — `{ overall_feasibility, score, tech_requirements, key_risks, time_estimate, summary }`
 - `DifferentiationResult` — `{ competition_level, competition_score, existing_solutions, unique_angles, devil_arguments, pivot_suggestions, summary }`
 - `VerdictResult` — `{ verdict, confidence, overall_score, scores: VerdictScores, one_liner, recommendation, alternative_ideas }`
-- `AnalysisStep` — `{ step, title, description, status: "pending"|"loading"|"done", result? }`
+- `AnalysisStep` — `{ step, title, description, status: "pending"|"loading"|"done", result?, progressText? }`
 
 ### API Contract
 
@@ -205,7 +206,7 @@ Score categories (each 0-100):
   - KILL = red (`text-kill`, `bg-kill/*`, `border-kill`)
 - Custom Tailwind colors defined in `tailwind.config.js`: `go`, `pivot`, `kill`.
 - Custom CSS component classes in `index.css`: `.step-card`, `.verdict-badge`, `.score-ring`.
-- Custom animations: `animate-fade-in` (0.5s), `animate-slide-up` (0.4s), `animate-pulse-slow` (3s).
+- Custom animations: `animate-fade-in` (0.5s), `animate-slide-up` (0.4s), `animate-pulse-slow` (3s), `animate-verdict-reveal` (0.8s), `animate-score-count` (1.2s), `animate-verdict-glow` (2s infinite).
 
 ### Code Style
 - Frontend: Functional components with named default exports. No class components.

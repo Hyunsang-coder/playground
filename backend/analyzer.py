@@ -108,7 +108,15 @@ class IdeaAnalyzer:
         return {"web_queries": [f"{idea} tool service app", f"{idea} alternative competitor"], "github_query": idea}
 
     async def _search_web(self, idea: str, ai_queries: list[str] | None = None) -> dict:
-        """Search web for competitors using Tavily API with AI-optimized queries."""
+        """Search web for competitors using Tavily API with AI-optimized queries.
+
+        Improvements over basic search:
+        1. Two Tavily calls run in parallel (asyncio.gather)
+        2. If results < 3, refines queries via Claude + retries with advanced depth
+        3. Filters results for relevance using Claude (removes blog posts, tutorials, etc.)
+        4. Uses include_raw_content for richer 500-char snippets
+        5. Dynamically escalates search_depth from basic → advanced on retry
+        """
         if not self.tavily_api_key:
             return {"competitors": [], "summary": "검색 API 키가 설정되지 않았습니다.", "raw_count": 0}
 
@@ -116,55 +124,149 @@ class IdeaAnalyzer:
         query2 = ai_queries[1] if ai_queries and len(ai_queries) > 1 else f"{idea} alternative competitor similar"
 
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                # Search for competitors
-                resp = await client.post(
-                    "https://api.tavily.com/search",
-                    json={
-                        "api_key": self.tavily_api_key,
-                        "query": query1,
-                        "max_results": 8,
-                        "search_depth": "basic",
-                    },
-                )
-                data = resp.json()
+            # Phase 1: Parallel basic search with extended snippets
+            competitors = await self._do_web_search_parallel(query1, query2, depth="basic")
 
-                competitors = []
-                for r in data.get("results", []):
-                    competitors.append({
-                        "title": r.get("title", ""),
-                        "url": r.get("url", ""),
-                        "snippet": r.get("content", "")[:200],
-                    })
+            # Phase 2: If results are sparse, refine queries + retry with advanced depth
+            if len(competitors) < 3:
+                refined_queries = await self._refine_search_queries(idea, competitors)
+                if refined_queries:
+                    rq1 = refined_queries[0] if len(refined_queries) > 0 else query1
+                    rq2 = refined_queries[1] if len(refined_queries) > 1 else query2
+                    retry_competitors = await self._do_web_search_parallel(rq1, rq2, depth="advanced")
+                    existing_urls = {c["url"] for c in competitors}
+                    for c in retry_competitors:
+                        if c["url"] not in existing_urls:
+                            competitors.append(c)
+                            existing_urls.add(c["url"])
 
-                # Second search for direct competitors
-                resp2 = await client.post(
-                    "https://api.tavily.com/search",
-                    json={
-                        "api_key": self.tavily_api_key,
-                        "query": query2,
-                        "max_results": 5,
-                        "search_depth": "basic",
-                    },
-                )
-                data2 = resp2.json()
+            # Phase 3: Filter for relevance using Claude
+            if competitors and self.anthropic_client:
+                competitors = await self._filter_relevant(idea, competitors)
 
-                for r in data2.get("results", []):
-                    url = r.get("url", "")
-                    if not any(c["url"] == url for c in competitors):
-                        competitors.append({
-                            "title": r.get("title", ""),
-                            "url": url,
-                            "snippet": r.get("content", "")[:200],
-                        })
-
-                return {
-                    "competitors": competitors[:10],
-                    "raw_count": len(competitors),
-                    "summary": f"웹에서 {len(competitors)}개의 관련 결과를 발견했습니다.",
-                }
+            return {
+                "competitors": competitors[:10],
+                "raw_count": len(competitors),
+                "summary": f"웹에서 {len(competitors)}개의 관련 결과를 발견했습니다.",
+            }
         except Exception as e:
             return {"competitors": [], "summary": f"검색 중 오류: {str(e)}", "raw_count": 0}
+
+    async def _do_web_search_parallel(self, query1: str, query2: str, depth: str = "basic") -> list[dict]:
+        """Execute two Tavily searches in parallel and merge results with dedup."""
+        timeout = 25.0 if depth == "advanced" else 15.0
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp1, resp2 = await asyncio.gather(
+                    client.post(
+                        "https://api.tavily.com/search",
+                        json={
+                            "api_key": self.tavily_api_key,
+                            "query": query1,
+                            "max_results": 8,
+                            "search_depth": depth,
+                            "include_raw_content": True,
+                        },
+                    ),
+                    client.post(
+                        "https://api.tavily.com/search",
+                        json={
+                            "api_key": self.tavily_api_key,
+                            "query": query2,
+                            "max_results": 5,
+                            "search_depth": depth,
+                            "include_raw_content": True,
+                        },
+                    ),
+                )
+
+                competitors = []
+                seen_urls = set()
+
+                for resp in [resp1, resp2]:
+                    data = resp.json()
+                    for r in data.get("results", []):
+                        url = r.get("url", "")
+                        if url and url not in seen_urls:
+                            seen_urls.add(url)
+                            raw = r.get("raw_content") or r.get("content") or ""
+                            competitors.append({
+                                "title": r.get("title", ""),
+                                "url": url,
+                                "snippet": raw[:500],
+                            })
+
+                return competitors
+        except Exception:
+            return []
+
+    async def _refine_search_queries(self, idea: str, current_results: list[dict]) -> list[str]:
+        """Use Claude to generate refined search queries when initial results are sparse."""
+        if not self.anthropic_client:
+            return []
+
+        results_summary = "\n".join(
+            [f"- {c['title']}" for c in current_results[:5]]
+        ) or "결과 없음"
+
+        prompt = f"""초기 검색 결과가 부실합니다. 더 나은 검색 쿼리를 생성하세요.
+
+아이디어: {idea}
+현재 검색 결과 ({len(current_results)}개):
+{results_summary}
+
+반드시 순수 JSON으로만 응답하세요:
+{{"queries": ["개선된 영어 검색 쿼리 1", "개선된 영어 검색 쿼리 2"]}}
+
+규칙:
+- 이전 쿼리와 다른 각도로 검색할 것
+- 더 넓은 키워드 또는 유사 도메인으로 검색
+- 동의어, 상위 카테고리, 관련 기술 활용"""
+
+        try:
+            response = await self.anthropic_client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=128,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = response.content[0].text.strip()
+            result = self._parse_json_safe(text, {})
+            return result.get("queries", [])
+        except Exception:
+            return []
+
+    async def _filter_relevant(self, idea: str, competitors: list[dict]) -> list[dict]:
+        """Use Claude to filter search results, keeping only actual competitors."""
+        if not competitors:
+            return []
+
+        items = []
+        for i, c in enumerate(competitors):
+            items.append(f"{i}. {c['title']} — {c['snippet'][:100]}")
+        items_text = "\n".join(items)
+
+        prompt = f"""아이디어: {idea}
+
+아래 검색 결과에서 실제 경쟁 제품/서비스/도구인 것만 골라주세요.
+뉴스 기사, 블로그 포스트, 튜토리얼, 문서 등은 제외하세요.
+
+{items_text}
+
+반드시 순수 JSON으로만 응답하세요:
+{{"relevant_indices": [0, 2, 5]}}"""
+
+        try:
+            response = await self.anthropic_client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=128,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = response.content[0].text.strip()
+            result = self._parse_json_safe(text, {})
+            indices = result.get("relevant_indices", list(range(len(competitors))))
+            return [competitors[i] for i in indices if isinstance(i, int) and 0 <= i < len(competitors)]
+        except Exception:
+            return competitors
 
     async def _search_github(self, idea: str, ai_query: str = "") -> dict:
         """Search GitHub for similar projects with AI-optimized query."""

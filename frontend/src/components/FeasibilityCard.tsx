@@ -1,4 +1,4 @@
-import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, ShieldAlert } from "lucide-react";
 import type { FeasibilityResult } from "../types";
 
 interface Props {
@@ -51,6 +51,21 @@ export default function FeasibilityCard({ data }: Props) {
               <span className={`text-xs font-mono ${DIFFICULTY_COLORS[t.difficulty] || "text-gray-400"}`}>
                 {t.difficulty}
               </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Data source risks */}
+      {data.data_source_risks?.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="flex items-center gap-2 text-sm font-semibold text-kill">
+            <ShieldAlert className="h-4 w-4" /> 데이터 소스 리스크
+          </h4>
+          {data.data_source_risks.map((risk, i) => (
+            <div key={i} className="flex items-start gap-2 rounded-lg border border-kill/20 bg-kill/5 p-3 text-sm">
+              <span className="text-kill">🚫</span>
+              <span className="text-gray-300">{risk}</span>
             </div>
           ))}
         </div>

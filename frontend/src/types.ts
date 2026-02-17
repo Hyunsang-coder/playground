@@ -37,6 +37,7 @@ export interface FeasibilityResult {
   score: number;
   tech_requirements: TechRequirement[];
   key_risks: string[];
+  data_source_risks: string[];
   time_estimate: string;
   summary: string;
 }

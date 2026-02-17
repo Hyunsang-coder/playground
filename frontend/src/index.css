@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-950 text-gray-100 antialiased;
+  }
+}
+
+@layer components {
+  .score-ring {
+    @apply relative flex items-center justify-center;
+  }
+
+  .verdict-badge {
+    @apply inline-flex items-center gap-2 rounded-full px-6 py-3 text-2xl font-black tracking-wider;
+  }
+
+  .step-card {
+    @apply rounded-2xl border border-gray-800 bg-gray-900/50 p-6 backdrop-blur;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 3px;
+}

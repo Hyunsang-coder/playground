@@ -38,9 +38,15 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
           onChange={(e) => setIdea(e.target.value)}
           placeholder="아이디어를 한 줄로 입력하세요..."
           rows={2}
+          maxLength={500}
           className="w-full resize-none rounded-2xl border border-gray-700 bg-gray-900 px-6 py-4 text-xl text-gray-100 placeholder-gray-500 outline-none transition-colors focus:border-kill/50 focus:ring-2 focus:ring-kill/20"
           disabled={isLoading}
         />
+        {idea.length > 400 && (
+          <div className="absolute bottom-2 right-4 text-xs text-gray-500">
+            {idea.length}/500
+          </div>
+        )}
       </div>
 
       {/* Example ideas */}

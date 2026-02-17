@@ -5,7 +5,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
-from pydantic import BaseModel
+from typing import Literal
+from pydantic import BaseModel, Field
 
 from analyzer import IdeaAnalyzer
 
@@ -23,8 +24,8 @@ app.add_middleware(
 
 
 class AnalyzeRequest(BaseModel):
-    idea: str
-    mode: str = "hackathon"  # "hackathon" | "startup" | "sideproject"
+    idea: str = Field(..., min_length=1, max_length=500)
+    mode: Literal["hackathon", "startup", "sideproject"] = "hackathon"
 
 
 @app.post("/api/analyze")

@@ -11,6 +11,12 @@ export interface GitHubRepo {
   url: string;
   language: string;
   updated: string;
+  topics?: string[];
+  forks?: number;
+  open_issues?: number;
+  readme_snippet?: string;
+  recent_commits?: number;
+  last_commit_date?: string;
 }
 
 export interface WebSearchResult {
@@ -22,6 +28,7 @@ export interface WebSearchResult {
 export interface GitHubSearchResult {
   repos: GitHubRepo[];
   total_count: number;
+  strategies_used?: string[];
   summary: string;
 }
 
@@ -30,6 +37,30 @@ export interface TechRequirement {
   available: boolean;
   difficulty: "easy" | "medium" | "hard";
   note: string;
+  alternatives?: string;
+}
+
+export interface ImplementationStep {
+  step: string;
+  estimated_hours: number;
+  complexity: "low" | "medium" | "high";
+  description: string;
+}
+
+export interface RequiredAPI {
+  name: string;
+  purpose: string;
+  free_tier: boolean;
+  rate_limit_concern: boolean;
+  alternative: string;
+}
+
+export interface ComplexityBreakdown {
+  frontend?: "low" | "medium" | "high";
+  backend?: "low" | "medium" | "high";
+  ai_ml?: "none" | "low" | "medium" | "high";
+  data?: "low" | "medium" | "high";
+  infra?: "low" | "medium" | "high";
 }
 
 export interface FeasibilityResult {
@@ -39,12 +70,19 @@ export interface FeasibilityResult {
   key_risks: string[];
   time_estimate: string;
   summary: string;
+  implementation_steps?: ImplementationStep[];
+  required_apis?: RequiredAPI[];
+  complexity_breakdown?: ComplexityBreakdown;
+  time_feasible?: boolean;
+  skill_level?: "junior" | "mid" | "senior" | "expert";
 }
 
 export interface ExistingSolution {
   name: string;
   similarity: number;
   weakness: string;
+  is_active?: boolean;
+  overlap_features?: string[];
 }
 
 export interface DifferentiationResult {
@@ -55,6 +93,7 @@ export interface DifferentiationResult {
   devil_arguments: string[];
   pivot_suggestions: string[];
   summary: string;
+  market_gap?: string;
 }
 
 export interface VerdictScores {
@@ -72,6 +111,8 @@ export interface VerdictResult {
   one_liner: string;
   recommendation: string;
   alternative_ideas: string[];
+  strengths?: string[];
+  weaknesses?: string[];
 }
 
 export type StepStatus = "pending" | "loading" | "done";

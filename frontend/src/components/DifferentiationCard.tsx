@@ -1,4 +1,4 @@
-import { Swords, Lightbulb, AlertOctagon } from "lucide-react";
+import { Swords, Lightbulb, AlertOctagon, Target } from "lucide-react";
 import type { DifferentiationResult } from "../types";
 
 interface Props {
@@ -27,6 +27,16 @@ export default function DifferentiationCard({ data }: Props) {
         </div>
       </div>
 
+      {/* Market gap */}
+      {data.market_gap && (
+        <div className="rounded-xl border border-go/20 bg-go/5 p-4">
+          <h4 className="flex items-center gap-2 text-sm font-semibold text-go">
+            <Target className="h-4 w-4" /> 시장 틈새
+          </h4>
+          <p className="mt-1 text-sm text-gray-300">{data.market_gap}</p>
+        </div>
+      )}
+
       {/* Existing solutions */}
       {data.existing_solutions.length > 0 && (
         <div className="space-y-2">
@@ -34,17 +44,33 @@ export default function DifferentiationCard({ data }: Props) {
             <Swords className="h-4 w-4" /> 기존 솔루션
           </h4>
           {data.existing_solutions.map((s, i) => (
-            <div key={i} className="flex items-center justify-between rounded-lg border border-gray-800 p-3">
-              <div>
-                <span className="font-medium">{s.name}</span>
-                <span className="ml-2 text-sm text-gray-500">— {s.weakness}</span>
+            <div key={i} className="rounded-lg border border-gray-800 p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{s.name}</span>
+                  {s.is_active !== undefined && (
+                    <span className={`rounded px-1.5 py-0.5 text-xs ${s.is_active ? "bg-go/10 text-go" : "bg-gray-800 text-gray-500"}`}>
+                      {s.is_active ? "활성" : "비활성"}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-gray-500">유사도</span>
+                  <span className={`font-mono font-bold ${s.similarity > 70 ? "text-kill" : s.similarity > 40 ? "text-pivot" : "text-go"}`}>
+                    {s.similarity}%
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-gray-500">유사도</span>
-                <span className={`font-mono font-bold ${s.similarity > 70 ? "text-kill" : s.similarity > 40 ? "text-pivot" : "text-go"}`}>
-                  {s.similarity}%
-                </span>
-              </div>
+              <div className="mt-1 text-sm text-gray-500">— {s.weakness}</div>
+              {s.overlap_features && s.overlap_features.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {s.overlap_features.map((f, j) => (
+                    <span key={j} className="rounded-full bg-kill/10 px-2 py-0.5 text-xs text-kill/70">
+                      {f}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>

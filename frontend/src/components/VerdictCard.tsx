@@ -1,3 +1,4 @@
+import { ThumbsUp, ThumbsDown } from "lucide-react";
 import type { VerdictResult } from "../types";
 
 interface Props {
@@ -51,12 +52,46 @@ export default function VerdictCard({ data }: Props) {
 
       {/* Score breakdown */}
       <div className="space-y-3 rounded-xl border border-gray-800 p-4">
-        <h4 className="text-sm font-semibold text-gray-300">점수 상세</h4>
+        <h4 className="text-sm font-semibold text-gray-300">점수 상세 (가중: 경쟁 20% / 실현성 35% / 차별화 25% / 타이밍 20%)</h4>
         <ScoreBar label="경쟁 현황" score={data.scores.competition} />
         <ScoreBar label="기술 실현성" score={data.scores.feasibility} />
         <ScoreBar label="차별화" score={data.scores.differentiation} />
         <ScoreBar label="타이밍" score={data.scores.timing} />
       </div>
+
+      {/* Strengths & Weaknesses */}
+      {((data.strengths && data.strengths.length > 0) || (data.weaknesses && data.weaknesses.length > 0)) && (
+        <div className="grid grid-cols-2 gap-3">
+          {data.strengths && data.strengths.length > 0 && (
+            <div className="rounded-xl border border-go/20 bg-go/5 p-4">
+              <h4 className="flex items-center gap-2 font-semibold text-go">
+                <ThumbsUp className="h-4 w-4" /> 강점
+              </h4>
+              <ul className="mt-2 space-y-1">
+                {data.strengths.map((s, i) => (
+                  <li key={i} className="text-sm text-gray-300">
+                    {s}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {data.weaknesses && data.weaknesses.length > 0 && (
+            <div className="rounded-xl border border-kill/20 bg-kill/5 p-4">
+              <h4 className="flex items-center gap-2 font-semibold text-kill">
+                <ThumbsDown className="h-4 w-4" /> 약점
+              </h4>
+              <ul className="mt-2 space-y-1">
+                {data.weaknesses.map((w, i) => (
+                  <li key={i} className="text-sm text-gray-300">
+                    {w}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Recommendation */}
       <div className={`rounded-xl border ${config.border}/30 ${config.bg} p-4`}>

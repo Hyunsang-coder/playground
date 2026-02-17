@@ -12,7 +12,7 @@ from analyzer import IdeaAnalyzer
 
 load_dotenv()
 
-app = FastAPI(title="KillMyIdea API")
+app = FastAPI(title="Valid8 API")
 
 app.add_middleware(
     CORSMiddleware,

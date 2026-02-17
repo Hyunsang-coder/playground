@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**KillMyIdea** — AI web service that ruthlessly validates hackathon ideas.
+**Valid8** — AI web service that ruthlessly validates hackathon ideas.
 
 Performs web search (competitors) + GitHub search (similar projects) + AI analysis (technical feasibility / differentiation) through a 5-step pipeline, delivering a final GO / PIVOT / KILL verdict.
 
@@ -45,7 +45,7 @@ Built for the OKKY Vibe Coding Hackathon (2026.02.21, 4-hour development window)
         ├── types.ts           # All TypeScript interfaces for API data shapes
         ├── useAnalysis.ts     # Custom hook — SSE stream parsing + state management
         └── components/
-            ├── Header.tsx           # App title with skull icon
+            ├── Header.tsx           # App title with shield-check icon
             ├── IdeaInput.tsx        # Idea textarea + mode selector + example chips
             ├── StepCard.tsx         # Step wrapper with icon/status/loading skeleton
             ├── CompetitorList.tsx   # Step 1 result — web competitor cards

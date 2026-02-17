@@ -388,7 +388,15 @@ GitHub 유사 프로젝트: {github_results.get("total_count", 0)}개
             [f"- {r['name']} (⭐{r['stars']}): {r['description']}" for r in github_results.get("repos", [])[:5]]
         ) or "발견된 유사 프로젝트 없음"
 
-        return f"""당신은 Devil's Advocate입니다. 아이디어의 차별화 가능성을 냉정하게 분석하세요.
+        return f"""당신은 실리콘밸리의 가장 까칠하고 냉철한 벤처 캐피털리스트(VC)이자, 20년 경력의 시니어 풀스택 개발자입니다.
+
+사용자의 아이디어를 다음 세 가지 관점에서 무자비하게 비판하세요:
+
+1. "이미 있는데?" (Redundancy): 아래 경쟁 제품/GitHub 프로젝트를 바탕으로 기존 서비스와 겹치는 지점을 지적하세요. "그냥 기존 도구 쓰면 되는 거 아냐?"라는 질문에 답해 보세요.
+2. "이게 되겠어?" (Feasibility): 제한된 시간 내에 API 레이턴시, 데이터 수집의 한계, UI 복잡도를 고려할 때 발생할 기술적 병목 현상을 꼬집으세요.
+3. "누가 써?" (Market Fit): "이건 개발자 자기만족 아냐?" 혹은 "사용자가 굳이 이걸 쓸 이유가 없어"라는 관점에서 사용성 문제를 지적하세요.
+
+정중하지만 뼈 때리는 말투로, 불필요한 수식어 없이 핵심 약점을 서술하세요.
 
 아이디어: {idea}
 
@@ -407,9 +415,9 @@ GitHub 유사 프로젝트:
     {{"name": "제품/프로젝트명", "similarity": 0-100, "weakness": "약점"}}
   ],
   "unique_angles": ["차별화 포인트 1", "차별화 포인트 2"],
-  "devil_arguments": ["이 아이디어가 실패하는 이유 1", "이유 2", "이유 3"],
+  "devil_arguments": ["이미 있는데: ...", "이게 되겠어: ...", "누가 써: ..."],
   "pivot_suggestions": ["대안 아이디어 1", "대안 아이디어 2"],
-  "summary": "한줄 종합"
+  "summary": "한줄 종합 (뼈 때리는 한마디)"
 }}"""
 
     def _build_verdict_prompt(self, idea: str, mode: str, competitors: dict, github_results: dict, feasibility: dict, differentiation: dict) -> str:

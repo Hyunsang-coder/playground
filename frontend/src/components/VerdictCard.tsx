@@ -9,9 +9,9 @@ interface Props {
 }
 
 const VERDICT_CONFIG = {
-  GO: { label: "GO", color: "text-go", border: "border-go", bg: "bg-go/20", glowColor: "rgba(34,197,94,0.4)", emoji: "🟢", desc: "진행하세요!" },
-  PIVOT: { label: "PIVOT", color: "text-pivot", border: "border-pivot", bg: "bg-pivot/20", glowColor: "rgba(234,179,8,0.4)", emoji: "🟡", desc: "방향 전환 권장" },
-  KILL: { label: "KILL", color: "text-kill", border: "border-kill", bg: "bg-kill/20", glowColor: "rgba(239,68,68,0.4)", emoji: "🔴", desc: "포기를 권합니다" },
+  GO: { label: "GO", color: "text-go", border: "border-go", bg: "bg-go/20", glowColor: "rgba(34,197,94,0.4)", emoji: "🔥", desc: "당장 코딩 시작하세요!" },
+  PIVOT: { label: "PIVOT", color: "text-pivot", border: "border-pivot", bg: "bg-pivot/20", glowColor: "rgba(234,179,8,0.4)", emoji: "🔄", desc: "방향 수정이 필요합니다." },
+  KILL: { label: "KILL", color: "text-kill", border: "border-kill", bg: "bg-kill/20", glowColor: "rgba(239,68,68,0.4)", emoji: "💀", desc: "다른 아이디어를 찾아보세요." },
 };
 
 function AnimatedScore({ value, color }: { value: number; color: string }) {
@@ -98,6 +98,7 @@ export default function VerdictCard({ data, idea, onReanalyze }: Props) {
           <span className="text-4xl">{config.emoji}</span>
           <span className={`text-4xl ${config.color}`}>{config.label}</span>
         </div>
+        <p className={`text-sm font-semibold ${config.color}`}>{config.desc}</p>
         <div className="text-center">
           <AnimatedScore value={data.overall_score} color={config.color} />
           <div className="text-sm text-gray-400">/ 100</div>

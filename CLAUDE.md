@@ -17,7 +17,7 @@ OKKY 바이브 코딩 해커톤 (2026.02.21, 4시간 개발) 출품작.
 - **Frontend**: React 19 + TypeScript + Vite + Tailwind CSS
 - **Backend**: FastAPI (Python) + SSE 스트리밍
 - **AI**: Claude API (anthropic SDK)
-- **Search**: Tavily API (웹 검색) + GitHub Search API
+- **Search**: Claude web_search (웹 검색) + GitHub Search API
 - **Icons**: lucide-react
 
 ## Build & Dev Commands
@@ -39,8 +39,7 @@ uvicorn main:app --reload --port 8000
 
 ```bash
 # backend/.env
-ANTHROPIC_API_KEY=           # Claude API 키
-TAVILY_API_KEY=              # Tavily 웹 검색 API 키
+ANTHROPIC_API_KEY=           # Claude API 키 (웹 검색 + AI 분석 통합)
 GITHUB_TOKEN=                # GitHub API 토큰 (선택, rate limit 완화)
 ```
 
@@ -48,7 +47,7 @@ GITHUB_TOKEN=                # GitHub API 토큰 (선택, rate limit 완화)
 
 ```
 아이디어 입력 → POST /api/analyze (SSE 스트리밍)
-  → Step 1: 웹 검색 (Tavily) — 경쟁 제품 탐색
+  → Step 1: 웹 검색 (Claude web_search) — 경쟁 제품 탐색
   → Step 2: GitHub 검색 — 유사 오픈소스 프로젝트
   → Step 3: AI 기술 실현성 분석 (Claude)
   → Step 4: AI 차별화 분석 (Claude)
@@ -60,7 +59,7 @@ GITHUB_TOKEN=                # GitHub API 토큰 (선택, rate limit 완화)
 
 - **`backend/main.py`**: FastAPI 서버, SSE 엔드포인트
 - **`backend/analyzer.py`**: 5단계 분석 파이프라인
-  - `_search_web()`: Tavily API 경쟁 제품 검색
+  - `_search_web()`: Claude web_search 경쟁 제품 검색
   - `_search_github()`: GitHub API 유사 프로젝트 검색
   - `_analyze_feasibility()`: Claude 기술 실현성 분석
   - `_analyze_differentiation()`: Claude 차별화 + Devil's Advocate
@@ -97,7 +96,7 @@ GITHUB_TOKEN=                # GitHub API 토큰 (선택, rate limit 완화)
 ## Fallback Strategy
 
 안정성 최우선:
-1. **Tavily API 실패**: 빈 결과 + 오류 메시지
+1. **웹 검색 실패**: 빈 결과 + 오류 메시지
 2. **GitHub API 실패**: 빈 결과 + 오류 메시지
 3. **Claude API 실패**: 점수 기반 자동 fallback 판정
 4. **전체 실패**: 에러 메시지 UI 표시

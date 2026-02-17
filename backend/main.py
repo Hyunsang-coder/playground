@@ -32,7 +32,6 @@ class AnalyzeRequest(BaseModel):
 async def analyze_idea(req: AnalyzeRequest):
     analyzer = IdeaAnalyzer(
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
-        tavily_api_key=os.getenv("TAVILY_API_KEY", ""),
         github_token=os.getenv("GITHUB_TOKEN", ""),
     )
 

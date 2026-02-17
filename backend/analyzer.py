@@ -38,9 +38,8 @@ CATEGORY_MINIMUM_FOR_GO = 25
 
 
 class IdeaAnalyzer:
-    def __init__(self, anthropic_api_key: str, tavily_api_key: str, github_token: str = ""):
+    def __init__(self, anthropic_api_key: str, github_token: str = ""):
         self.anthropic_client = anthropic.AsyncAnthropic(api_key=anthropic_api_key) if anthropic_api_key else None
-        self.tavily_api_key = tavily_api_key
         self.github_token = github_token
 
     # ── Input Validation ──────────────────────────────────────────
@@ -115,54 +114,76 @@ class IdeaAnalyzer:
 
         yield {"event": "done", "data": {"message": "분석 완료"}}
 
-    # ── Step 1: Web Search ────────────────────────────────────────
+    # ── Step 1: Web Search (Claude web_search) ─────────────────────
 
     async def _search_web(self, idea: str) -> dict:
-        """Search web for competitors using Tavily API."""
-        if not self.tavily_api_key:
-            return {"competitors": [], "summary": "검색 API 키가 설정되지 않았습니다.", "raw_count": 0}
+        """Search web for competitors using Claude's built-in web_search tool."""
+        if not self.anthropic_client:
+            return {"competitors": [], "summary": "API 키가 설정되지 않았습니다.", "raw_count": 0}
 
-        query = self._sanitize_query(idea)
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resp1, resp2 = await asyncio.gather(
-                    client.post("https://api.tavily.com/search", json={
-                        "api_key": self.tavily_api_key,
-                        "query": f"{query} tool service app",
-                        "max_results": 8,
-                        "search_depth": "basic",
-                    }),
-                    client.post("https://api.tavily.com/search", json={
-                        "api_key": self.tavily_api_key,
-                        "query": f"{query} alternative competitor similar",
-                        "max_results": 5,
-                        "search_depth": "basic",
-                    }),
-                    return_exceptions=True,
-                )
+            response = await self.anthropic_client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=1024,
+                tools=[{
+                    "type": "web_search_20250305",
+                    "name": "web_search",
+                    "max_uses": 5,
+                }],
+                messages=[{
+                    "role": "user",
+                    "content": f"""다음 아이디어와 유사하거나 경쟁이 되는 서비스/제품/도구를 웹에서 검색하세요.
 
-                seen_urls: set[str] = set()
-                competitors = []
+아이디어: {idea}
 
-                for resp in [resp1, resp2]:
-                    if isinstance(resp, Exception):
-                        continue
-                    data = resp.json()
-                    for r in data.get("results", []):
-                        url = r.get("url", "")
-                        if url and url not in seen_urls:
-                            seen_urls.add(url)
-                            competitors.append({
-                                "title": r.get("title", ""),
-                                "url": url,
-                                "snippet": r.get("content", "")[:200],
-                            })
+검색 후 발견한 경쟁 제품들을 반드시 순수 JSON으로만 응답하세요:
 
-                return {
-                    "competitors": competitors[:10],
-                    "raw_count": len(competitors),
-                    "summary": f"웹에서 {len(competitors)}개의 관련 결과를 발견했습니다.",
-                }
+{{
+  "competitors": [
+    {{"title": "제품/서비스명", "url": "URL", "snippet": "한줄 설명 (200자 이내)"}}
+  ],
+  "raw_count": 발견된 경쟁 제품 수,
+  "summary": "검색 결과 요약 한줄"
+}}""",
+                }],
+            )
+
+            # Extract text blocks and search result URLs
+            text_parts = []
+            search_urls: list[dict] = []
+
+            for block in response.content:
+                if block.type == "text":
+                    text_parts.append(block.text)
+                elif block.type == "web_search_tool_result":
+                    for item in getattr(block, "content", []):
+                        url = getattr(item, "url", "")
+                        title = getattr(item, "title", "")
+                        if url:
+                            search_urls.append({"title": title, "url": url})
+
+            full_text = "\n".join(text_parts).strip()
+
+            # Try parsing Claude's structured JSON response
+            fallback = {"competitors": [], "summary": "검색 결과 파싱 실패", "raw_count": 0}
+            result = self._parse_json_safe(full_text, fallback)
+
+            # Supplement with raw search URLs that Claude might have missed
+            if result is not fallback:
+                existing_urls = {c.get("url") for c in result.get("competitors", [])}
+                for su in search_urls:
+                    if su["url"] not in existing_urls and len(result.get("competitors", [])) < 10:
+                        result["competitors"].append({**su, "snippet": ""})
+                result["raw_count"] = len(result.get("competitors", []))
+                return result
+
+            # Fallback: use raw search URLs directly
+            competitors = [{"title": u["title"], "url": u["url"], "snippet": ""} for u in search_urls[:10]]
+            return {
+                "competitors": competitors,
+                "raw_count": len(competitors),
+                "summary": f"웹에서 {len(competitors)}개의 관련 결과를 발견했습니다.",
+            }
         except Exception as e:
             return {"competitors": [], "summary": f"검색 중 오류: {str(e)}", "raw_count": 0}
 

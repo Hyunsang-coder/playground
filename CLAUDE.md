@@ -4,115 +4,235 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**낚시 판별기 (Clickbait Detector)** — YouTube 영상 제목이 약속한 내용과 실제 영상 내용의 일치도를 3중 분석(자막+댓글+메타데이터)으로 판별하는 AI 웹 서비스.
+**KillMyIdea** — AI web service that ruthlessly validates hackathon ideas.
 
-핵심 차별점: "낚시인지 판단해줘"를 통째로 묻지 않고, 제목의 약속(claim)을 분해 → 각각을 자막에서 검증 → 정량적 점수로 변환. "왜 이 점수인가"를 약속별로 설명 가능.
+Performs web search (competitors) + GitHub search (similar projects) + AI analysis (technical feasibility / differentiation) through a 5-step pipeline, delivering a final GO / PIVOT / KILL verdict.
 
-OKKY 바이브 코딩 해커톤 (2026.02.21, 4시간 개발) 출품작.
+Key differentiator: Existing idea validators take a business/startup perspective. This tool focuses on **hackathon/developer perspective** — technical feasibility + competitive code analysis.
+
+Built for the OKKY Vibe Coding Hackathon (2026.02.21, 4-hour development window).
 
 ## Tech Stack
 
-- **Framework**: Next.js 16 (App Router) + React 19 + TypeScript
-- **Styling**: Tailwind CSS (dark mode default)
-- **YouTube Data**: googleapis (YouTube Data API v3)
-- **Transcript**: youtube-transcript (자막 추출)
-- **AI**: Claude API (@anthropic-ai/sdk)
-- **Validation**: zod (LLM JSON 응답 스키마 검증)
-- **Concurrency**: p-limit (LLM rate-limit 보호)
-- **Charts**: Recharts
-- **Icons**: lucide-react
+- **Frontend**: React 19 + TypeScript 5.7 + Vite 6 + Tailwind CSS 3.4
+- **Backend**: FastAPI 0.115 (Python) + SSE streaming via `sse-starlette`
+- **AI**: Claude API (`anthropic` SDK, model: `claude-sonnet-4-20250514`)
+- **Search**: Tavily API (web search) + GitHub Search API v3
+- **HTTP Client**: `httpx` (async, backend) + native `fetch` with `ReadableStream` (frontend)
+- **Icons**: `lucide-react`
+
+## Project Structure
+
+```
+├── CLAUDE.md
+├── .gitignore
+├── backend/
+│   ├── .env.example          # Environment variable template
+│   ├── requirements.txt      # Python dependencies (pinned versions)
+│   ├── main.py               # FastAPI server, CORS, SSE endpoint, health check
+│   └── analyzer.py           # IdeaAnalyzer class — 5-step analysis pipeline
+└── frontend/
+    ├── index.html             # Entry HTML (lang="ko", dark class on <html>)
+    ├── package.json           # npm config (type: "module")
+    ├── tsconfig.json          # TypeScript config (strict, ES2020 target)
+    ├── vite.config.ts         # Vite config with /api proxy to localhost:8000
+    ├── tailwind.config.js     # Custom colors (go/pivot/kill), animations
+    ├── postcss.config.js      # PostCSS with Tailwind + autoprefixer
+    └── src/
+        ├── main.tsx           # React entrypoint (StrictMode)
+        ├── App.tsx            # Root component — routes between input and results views
+        ├── index.css          # Tailwind layers + custom component classes + scrollbar
+        ├── types.ts           # All TypeScript interfaces for API data shapes
+        ├── useAnalysis.ts     # Custom hook — SSE stream parsing + state management
+        └── components/
+            ├── Header.tsx           # App title with skull icon
+            ├── IdeaInput.tsx        # Idea textarea + mode selector + example chips
+            ├── StepCard.tsx         # Step wrapper with icon/status/loading skeleton
+            ├── CompetitorList.tsx   # Step 1 result — web competitor cards
+            ├── GitHubList.tsx       # Step 2 result — GitHub repo cards with stars
+            ├── FeasibilityCard.tsx  # Step 3 result — score + tech requirements + risks
+            ├── DifferentiationCard.tsx  # Step 4 result — competition level + devil's arguments
+            └── VerdictCard.tsx      # Step 5 result — final verdict badge + score bars
+```
 
 ## Build & Dev Commands
 
 ```bash
-npm run dev          # 개발 서버 (localhost:3000)
-npm run build        # 프로덕션 빌드
-npm run lint         # ESLint
+# Frontend
+cd frontend
+npm install              # Install dependencies
+npm run dev              # Dev server (localhost:5173, proxies /api → :8000)
+npm run build            # Production build (runs tsc -b first, then vite build)
+npm run preview          # Preview production build
+npx tsc --noEmit         # TypeScript type check only
+
+# Backend
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
 ```
+
+There are no test suites, linters, or formatters configured in this project.
 
 ## Environment Variables
 
-```bash
-ANTHROPIC_API_KEY=           # Claude API 키
-YOUTUBE_API_KEY=             # YouTube Data API v3 키
-TRANSCRIPT_MAX_LENGTH=8000   # 자막 최대 글자수 (초과 시 샘플링)
-LLM_MAX_CONCURRENCY=2       # 동시 LLM 호출 수
-```
+Required in `backend/.env` (see `backend/.env.example`):
+
+| Variable | Required | Description |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Yes | Claude API key for AI analysis (steps 3-5) |
+| `TAVILY_API_KEY` | Yes | Tavily web search API key (step 1) |
+| `GITHUB_TOKEN` | No | GitHub API token — optional, increases rate limits (step 2) |
 
 ## Architecture
 
+### Request Flow
+
 ```
-YouTube URL 입력 → POST /api/analyze
-  → extractVideoId(url)
-  → 캐시 확인 (메모리)
-  → Promise.all([fetchMetadata, fetchTranscript])
-  → fetchComments
-  → Layer 1: calculateMetaScore (코드, 즉시)
-  → Layer 2: analyzeTranscript (LLM 호출 1회)
-  → Layer 3: analyzeComments (키워드 + 선택적 LLM 호출 1회)
-  → combineFinalScore (가중 합산)
-  → return AnalysisResult JSON
+User input → POST /api/analyze { idea, mode } → SSE streaming response
+  → Step 1: Web search (Tavily)        — competitor discovery
+  → Step 2: GitHub search              — similar open-source projects
+  → Step 3: AI feasibility analysis    — Claude (technical implementation analysis)
+  → Step 4: AI differentiation analysis — Claude (Devil's Advocate perspective)
+  → Step 5: Final verdict generation   — Claude (aggregate GO/PIVOT/KILL)
+  → SSE events: step_start → step_result → ... → done
 ```
 
-### Key Modules
+### Backend Modules
 
-- **`src/lib/youtube/`**: YouTube 데이터 수집
-  - `fetch-metadata.ts`: YouTube Data API v3 — 메타데이터 + 댓글 최대 100개
-  - `fetch-transcript.ts`: youtube-transcript — 자막 추출 + 긴 자막 샘플링
-- **`src/lib/analyzer/`**: 3중 분석 파이프라인
-  - `metadata-scorer.ts`: 순수 코드 — 자극적 단어, 문장부호, 이모지, 좋아요율
-  - `transcript-analyzer.ts`: LLM 1회 — 제목 약속 추출 + 자막 대조 검증
-  - `comment-analyzer.ts`: 키워드 필터링 + 선택적 LLM 1회 — 댓글 감성 분석
-  - `prompt.ts`: LLM 프롬프트 템플릿 (자막 분석, 댓글 분석)
-  - `schema.ts`: zod 스키마 (LLM JSON 응답 검증)
-  - `score-combiner.ts`: 3개 레이어 가중 합산 + verdict 결정
-- **`src/lib/cache/memory-store.ts`**: videoId 기준 메모리 캐시 (30분 TTL)
-- **`src/lib/fixtures/demo-result.ts`**: 데모용 fixture 데이터
-- **`src/components/`**: 대시보드 UI 컴포넌트
+**`backend/main.py`** — FastAPI application:
+- `POST /api/analyze`: SSE endpoint, accepts `{ idea: str, mode: str }`, streams events
+- `GET /health`: Health check endpoint returning `{ status: "ok" }`
+- CORS configured with permissive `allow_origins=["*"]`
+- Creates a new `IdeaAnalyzer` instance per request with env-based API keys
 
-### Core Types (`src/lib/types.ts`)
+**`backend/analyzer.py`** — `IdeaAnalyzer` class:
+- `analyze(idea, mode)`: Async generator yielding SSE events for each pipeline step
+- `_search_web(idea)`: Two Tavily API calls (general + competitor-focused), deduplicates by URL, returns up to 10 results
+- `_search_github(idea)`: GitHub Search API, sorted by stars descending, returns up to 10 repos
+- `_analyze_feasibility(idea, mode, competitors, github_results)`: Claude prompt for technical feasibility scoring
+- `_analyze_differentiation(idea, competitors, github_results)`: Claude prompt with Devil's Advocate framing
+- `_generate_verdict(idea, mode, competitors, github_results, feasibility, differentiation)`: Claude prompt for final judgment
+- `_parse_json_safe(text, fallback)`: Robust JSON parser — tries direct parse, markdown code block extraction, then `{...}` extraction
+- `_fallback_*()` methods: Deterministic fallback results when Claude API is unavailable
 
-- `VideoMetadata`: YouTube 영상 메타데이터
-- `VideoComment`: 댓글 데이터
-- `TranscriptSegment`: 자막 세그먼트
-- `ClaimVerification`: 약속별 검증 결과 (claim, evidence, score, met)
-- `TranscriptAnalysis`: 자막 분석 결과 (claims[], overallScore, summary)
-- `CommentAnalysis`: 댓글 분석 결과 (keyword + AI)
-- `MetadataAnalysis`: 메타데이터 분석 결과
-- `AnalysisResult`: 종합 결과 (trustScore, verdict, 3개 레이어 상세)
+### Frontend Architecture
 
-### Score & Verdict
+**State Management**: Single `useAnalysis` custom hook manages all state:
+- `steps: AnalysisStep[]` — accumulated step data
+- `isAnalyzing: boolean` — loading state
+- `error: string | null` — error message
+- `analyze(idea, mode)` — triggers SSE streaming
+- `reset()` — clears all state for a new analysis
 
-- trustScore 0-100 (높을수록 신뢰)
-- `>= 70`: trustworthy (신뢰) — 초록
-- `40-69`: suspect (의심) — 노랑
-- `< 40`: clickbait (낚시) — 빨강
+**SSE Parsing** (`useAnalysis.ts`): Manual `ReadableStream` parsing (not EventSource API):
+- Reads response body chunks via `getReader()`
+- Splits on newlines, buffers incomplete lines
+- Detects event type by inspecting parsed data structure:
+  - `data.step + data.title` → `step_start` event
+  - `data.step + data.result` → `step_result` event
+  - `data.message === "분석 완료"` → `done` event
 
-### Weight Distribution
+**Component Hierarchy**:
+```
+App
+├── Header
+├── IdeaInput (shown when no results)
+│   └── Mode selector (hackathon / startup / sideproject)
+└── StepCard[] (shown when results exist)
+    ├── CompetitorList    (step 1)
+    ├── GitHubList        (step 2)
+    ├── FeasibilityCard   (step 3)
+    ├── DifferentiationCard (step 4)
+    └── VerdictCard       (step 5)
+```
 
-- **3중 분석 모두 가능**: 자막 50% + 댓글 30% + 메타 20%
-- **자막 없음**: 댓글 60% + 메타 40%
-- **댓글 부족**: 자막 65% + 메타 35%
+### TypeScript Types (`frontend/src/types.ts`)
+
+All API response shapes are typed:
+- `WebSearchResult` — `{ competitors: Competitor[], raw_count, summary }`
+- `GitHubSearchResult` — `{ repos: GitHubRepo[], total_count, summary }`
+- `FeasibilityResult` — `{ overall_feasibility, score, tech_requirements, key_risks, time_estimate, summary }`
+- `DifferentiationResult` — `{ competition_level, competition_score, existing_solutions, unique_angles, devil_arguments, pivot_suggestions, summary }`
+- `VerdictResult` — `{ verdict, confidence, overall_score, scores: VerdictScores, one_liner, recommendation, alternative_ideas }`
+- `AnalysisStep` — `{ step, title, description, status: "pending"|"loading"|"done", result? }`
 
 ### API Contract
 
-`POST /api/analyze` — 요청: `{ url }` — 성공: `{ analysisId, result: AnalysisResult }` — 실패: `{ error: { code, message } }`
+**`POST /api/analyze`**
+
+Request body:
+```json
+{ "idea": "string", "mode": "hackathon" | "startup" | "sideproject" }
+```
+
+SSE stream events:
+- `step_start`: `{ "step": 1-5, "title": "string", "description": "string" }`
+- `step_result`: `{ "step": 1-5, "result": { ... } }` (result shape varies by step)
+- `done`: `{ "message": "분석 완료" }`
+
+Mode context mapping:
+- `hackathon` → 4시간 해커톤 (1인 개발자)
+- `startup` → 초기 스타트업 (3-5명 팀, 3개월)
+- `sideproject` → 사이드 프로젝트 (1-2명, 주말 개발)
+
+### Verdict System
+
+- `overall_score`: 0-100
+- `GO` (🟢): Proceed — green `#22c55e`
+- `PIVOT` (🟡): Pivot recommended — yellow `#eab308`
+- `KILL` (🔴): Abandon recommended — red `#ef4444`
+
+Score categories (each 0-100):
+- **competition**: Competitive landscape (lower = more crowded / red ocean)
+- **feasibility**: Technical feasibility
+- **differentiation**: Differentiation potential
+- **timing**: Market timing appropriateness
 
 ## Important Conventions
 
-- LLM 프롬프트 출력은 **반드시 순수 JSON**. 마크다운/코드블록 금지.
-- 낚시를 "낚시"로 단정하지 않고 **"의심"**으로 표현. UI/프롬프트 동일.
-- UI는 다크 모드 기본. 숫자는 크게, 한눈에 들어오도록.
-- 색상 의미 고정: 신뢰(초록 #22c55e), 의심(노랑 #eab308), 낚시(빨강 #ef4444).
+### LLM Prompts
+- All Claude prompts require **pure JSON output only**. No markdown, no code blocks.
+- The `_parse_json_safe` method handles cases where Claude wraps JSON in code blocks anyway.
+- Prompts are written in Korean.
 
-## Fallback Strategy (데모 안정성)
+### UI/Design
+- **Dark mode by default** — `dark` class on `<html>`, `bg-gray-950` base.
+- Numbers displayed prominently (`text-5xl font-black` or `text-6xl font-black`).
+- Color semantics are fixed and consistent:
+  - GO = green (`text-go`, `bg-go/*`, `border-go`)
+  - PIVOT = yellow (`text-pivot`, `bg-pivot/*`, `border-pivot`)
+  - KILL = red (`text-kill`, `bg-kill/*`, `border-kill`)
+- Custom Tailwind colors defined in `tailwind.config.js`: `go`, `pivot`, `kill`.
+- Custom CSS component classes in `index.css`: `.step-card`, `.verdict-badge`, `.score-ring`.
+- Custom animations: `animate-fade-in` (0.5s), `animate-slide-up` (0.4s), `animate-pulse-slow` (3s).
 
-안정성 최우선. 3단계 방어:
-1. **YouTube API 실패**: fixture JSON 자동 반환
-2. **자막 없음**: 가중치 재분배 (댓글 60% + 메타 40%)
-3. **LLM 실패**: zod 파싱 실패 → 1회 재시도 → 메타데이터+키워드 only fallback
-4. **전체 실패**: fixture 결과 + "샘플 데이터 모드" 배지 표시
+### Code Style
+- Frontend: Functional components with named default exports. No class components.
+- Backend: Single-class design (`IdeaAnalyzer`), async throughout.
+- All user-facing text is in Korean.
+- TypeScript strict mode enabled; `noUnusedLocals` and `noUnusedParameters` are disabled.
 
-## Detailed Plan
+### Dependencies
+- Backend dependencies are pinned to exact minor versions in `requirements.txt`.
+- Frontend dependencies use caret (`^`) ranges in `package.json`.
 
-전체 구현 플랜은 `PLAN.md` 참조.
+## Fallback Strategy
+
+Stability is the top priority. Each external service has independent fallback:
+
+1. **Tavily API failure**: Returns empty competitor list + error message in `summary`
+2. **GitHub API failure**: Returns empty repo list + error message in `summary`
+3. **Claude API failure** (steps 3-5): Score-based automatic fallback verdict using `_fallback_*()` methods
+   - Feasibility defaults to score 50, "partial" feasibility
+   - Differentiation calculates competition level from raw competitor+repo count
+   - Verdict averages feasibility and differentiation scores: ≥70 → GO, ≥40 → PIVOT, <40 → KILL
+4. **Missing API keys**: Detected at call time; returns fallback data without making requests
+5. **Total failure**: Error message displayed in UI via red error banner
+
+## Development Notes
+
+- The Vite dev server proxies `/api` requests to `http://localhost:8000` — run both frontend and backend servers during development.
+- No `.env` file is committed; copy `backend/.env.example` to `backend/.env` and fill in keys.
+- The `frontend/public/skull.svg` is used as the favicon.
+- SSE streaming uses `sse-starlette` on the backend and manual `ReadableStream` parsing on the frontend (not the browser `EventSource` API, since POST requests are needed).

@@ -98,8 +98,17 @@ npm run dev
 ├── backend/
 │   ├── .env.example             # 환경 변수 템플릿
 │   ├── requirements.txt         # Python 의존성
+│   ├── pytest.ini               # pytest 설정
 │   ├── main.py                  # FastAPI 서버
-│   └── analyzer.py              # 5단계 분석 파이프라인
+│   ├── analyzer.py              # 5단계 분석 파이프라인
+│   └── tests/                   # 테스트 스위트 (66개)
+│       ├── conftest.py          # 공통 fixtures
+│       ├── test_unit.py         # 단위 테스트
+│       ├── test_integration.py  # 통합 테스트 (모킹)
+│       ├── test_api.py          # API 엔드포인트 테스트
+│       ├── test_schema.py       # 스키마 검증 테스트
+│       ├── test_live_smoke.py   # 실제 API 스모크 테스트
+│       └── test_live_consistency.py  # 결과 일관성 테스트
 └── frontend/
     ├── index.html
     ├── package.json
@@ -119,6 +128,30 @@ npm run dev
             ├── DifferentiationCard.tsx
             └── VerdictCard.tsx
 ```
+
+## 테스트
+
+```bash
+cd backend
+
+# 모킹 기반 테스트 (API 키 불필요, 66개)
+pytest -v --ignore=tests/test_live_smoke.py --ignore=tests/test_live_consistency.py
+
+# 실제 API 스모크 테스트 (API 키 필요)
+pytest -v -m live_api
+
+# 전체 테스트
+pytest -v
+```
+
+| 테스트 계층 | 설명 | 수량 | API 키 |
+|---|---|---|---|
+| 단위 테스트 | JSON 파서, fallback 로직, 입력 검증 | 28 | 불필요 |
+| 통합 테스트 | 모킹 기반 전체 파이프라인 | 8 | 불필요 |
+| API 테스트 | FastAPI 엔드포인트 + SSE 스트림 | 9 | 불필요 |
+| 스키마 검증 | TypeScript 타입 정의 기반 구조 검증 | 14 | 불필요 |
+| 스모크 테스트 | 샘플 아이디어 실제 API 실행 | 21 | 필요 |
+| 일관성 테스트 | 동일 아이디어 반복 실행 구조 비교 | 4 | 필요 |
 
 ## 빌드
 

@@ -29,8 +29,17 @@ Built for the OKKY Vibe Coding Hackathon (2026.02.21, 4-hour development window)
 ├── backend/
 │   ├── .env.example          # Environment variable template
 │   ├── requirements.txt      # Python dependencies (pinned versions)
+│   ├── pytest.ini            # pytest config (asyncio_mode=auto, live_api marker)
 │   ├── main.py               # FastAPI server, CORS, SSE endpoint, health check
-│   └── analyzer.py           # IdeaAnalyzer class — 5-step analysis pipeline
+│   ├── analyzer.py           # IdeaAnalyzer class — 5-step analysis pipeline
+│   └── tests/
+│       ├── conftest.py              # Shared fixtures + sample data
+│       ├── test_unit.py             # Unit tests — pure functions, Pydantic validation
+│       ├── test_integration.py      # Integration tests — mocked pipeline + fallbacks
+│       ├── test_api.py              # API endpoint tests — FastAPI TestClient + SSE
+│       ├── test_schema.py           # Schema validation — result structure vs TS types
+│       ├── test_live_smoke.py       # Live API smoke tests (requires API keys)
+│       └── test_live_consistency.py # Result consistency tests (requires API keys)
 └── frontend/
     ├── index.html             # Entry HTML (lang="ko", dark class on <html>)
     ├── package.json           # npm config (type: "module")
@@ -70,9 +79,15 @@ npx tsc --noEmit         # TypeScript type check only
 cd backend
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
+
+# Tests (from backend/)
+cd backend
+pytest -v --ignore=tests/test_live_smoke.py --ignore=tests/test_live_consistency.py   # Mocked tests (66 tests, no API keys needed)
+pytest -v -m live_api                         # Live API tests (requires ANTHROPIC_API_KEY + TAVILY_API_KEY)
+pytest -v                                     # All tests
 ```
 
-There are no test suites, linters, or formatters configured in this project.
+No linters or formatters are configured. Backend test suite uses `pytest` + `pytest-asyncio`.
 
 ## Environment Variables
 
@@ -230,6 +245,48 @@ Stability is the top priority. Each external service has independent fallback:
    - Verdict averages feasibility and differentiation scores: ≥70 → GO, ≥40 → PIVOT, <40 → KILL
 4. **Missing API keys**: Detected at call time; returns fallback data without making requests
 5. **Total failure**: Error message displayed in UI via red error banner
+
+## Testing
+
+### Test Architecture (5 layers)
+
+| File | Type | Count | API Keys |
+|---|---|---|---|
+| `test_unit.py` | Unit tests — `_parse_json_safe`, `_fallback_*`, Pydantic validation | 28 | No |
+| `test_integration.py` | Integration — full pipeline with mocked Tavily/GitHub/Claude | 8 | No |
+| `test_api.py` | API endpoints — FastAPI TestClient, SSE stream, input validation | 9 | No |
+| `test_schema.py` | Schema validation — results match TypeScript type definitions | 14 | No |
+| `test_live_smoke.py` | Smoke — 3 sample ideas through real APIs, structure validation | 21 | Yes |
+| `test_live_consistency.py` | Consistency — same idea 2x, verify structural consistency | 4 | Yes |
+
+### Test Categories
+
+**Automated (mocked, 66 tests)**:
+- JSON parser robustness (valid, markdown-wrapped, garbage → fallback)
+- Fallback logic correctness (score thresholds → GO/PIVOT/KILL)
+- Pydantic request validation (empty, too long, invalid mode)
+- Full pipeline event sequence (5× step_start + step_result + done)
+- Fallback paths (missing API keys → deterministic results)
+- SSE event structure and API response codes
+- Result schemas match frontend TypeScript interfaces
+
+**Automated (live API, `@pytest.mark.live_api`)**:
+- Sample ideas produce valid 5-step results
+- All scores within 0-100 range
+- Verdict/competition_level/feasibility enum values valid
+- Structural consistency across multiple runs
+
+**Manual (not automated)**:
+- AI output quality (relevance, Devil's Arguments meaningfulness)
+- UI/UX (animations, dark mode, responsive layout, SSE streaming feel)
+- Edge cases (vague ideas, rapid re-submission, special characters)
+
+### Key Testing Patterns
+
+- `tests/conftest.py` defines shared fixtures: `SAMPLE_COMPETITORS`, `SAMPLE_GITHUB`, `SAMPLE_FEASIBILITY`, `SAMPLE_DIFFERENTIATION`, `SAMPLE_VERDICT`
+- `tests/test_schema.py` exports `validate_*_result()` helpers reused by live tests
+- SSE tests reset `sse_starlette.AppStatus.should_exit_event` per test to avoid event loop binding issues
+- Live tests are skipped when `ANTHROPIC_API_KEY` or `TAVILY_API_KEY` are not set
 
 ## Development Notes
 

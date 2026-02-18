@@ -14,7 +14,7 @@
 |---|---|
 | **Frontend** | React 19 + TypeScript 5.7 + Vite 6 + Tailwind CSS 3.4 |
 | **Backend** | FastAPI 0.115 (Python) + SSE streaming (`sse-starlette`) |
-| **AI** | Claude API (`anthropic` SDK, `claude-sonnet-4-20250514`) |
+| **AI** | Claude API (`anthropic` SDK, `claude-sonnet-4-6`) |
 | **검색** | Tavily API (웹 검색) + GitHub Search API v3 |
 | **HTTP** | `httpx` (백엔드) + `fetch` + `ReadableStream` (프론트엔드) |
 
@@ -43,8 +43,12 @@ cp backend/.env.example backend/.env
 
 ```bash
 cd backend
+source .venv/bin/activate        # 가상환경 활성화 (필수, Python 3.12)
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
+
+# 포트 8000이 이미 점유된 경우
+lsof -ti:8000 | xargs kill -9
 ```
 
 ### 프론트엔드 실행
@@ -56,6 +60,35 @@ npm run dev
 ```
 
 브라우저에서 `http://localhost:5173`으로 접속합니다. Vite 개발 서버가 `/api` 요청을 `localhost:8000`으로 프록시합니다.
+
+### 수동 테스트
+
+백엔드 + 프론트엔드 서버를 모두 실행한 상태에서 테스트합니다.
+
+```bash
+# 터미널 1: 백엔드
+cd backend
+source .venv/bin/activate
+uvicorn main:app --reload --port 8000
+
+# 터미널 2: 프론트엔드
+cd frontend
+npm run dev
+```
+
+**UI 테스트**: `http://localhost:5173` 접속 → 아이디어 입력 → 분석 실행 → 5단계 결과 확인
+
+**API 직접 테스트**:
+
+```bash
+# 헬스 체크
+curl http://localhost:8000/health
+
+# 분석 API (SSE 스트리밍)
+curl -N -X POST http://localhost:8000/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"idea": "AI를 활용한 코드 리뷰 자동화 도구", "mode": "hackathon"}'
+```
 
 ## 분석 파이프라인
 
@@ -84,10 +117,10 @@ npm run dev
 
 ## 분석 모드
 
-| 모드 | 설명 |
-|---|---|
-| **해커톤** | 5시간 이내, 1인 개발자, 바이브코딩 환경 |
-| **사이드 프로젝트** | 주말 개발, 1~2인, 배포까지 목표 |
+| 모드 | 코드값 | 설명 |
+|---|---|---|
+| **해커톤** | `hackathon` | 5시간 이내, 1인 개발자, 바이브코딩 환경 |
+| **사이드 프로젝트** | `sideproject` | 주말 개발, 1~2인, 배포까지 목표 |
 
 ## 프로젝트 구조
 
@@ -132,6 +165,7 @@ npm run dev
 
 ```bash
 cd backend
+source .venv/bin/activate        # 가상환경 활성화 (필수)
 
 # 모킹 기반 테스트 (API 키 불필요, 66개)
 pytest -v --ignore=tests/test_live_smoke.py --ignore=tests/test_live_consistency.py

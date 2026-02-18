@@ -1,7 +1,10 @@
 """Shared fixtures for Valid8 backend tests."""
 
 import pytest
+from dotenv import load_dotenv
 from analyzer import IdeaAnalyzer
+
+load_dotenv()
 
 
 # ---------------------------------------------------------------------------

@@ -16,7 +16,7 @@ Built for the OKKY Vibe Coding Hackathon (2026.02.21, 4-hour development window)
 
 - **Frontend**: React 19 + TypeScript 5.7 + Vite 6 + Tailwind CSS 3.4
 - **Backend**: FastAPI 0.115 (Python) + SSE streaming via `sse-starlette`
-- **AI**: Claude API (`anthropic` SDK, model: `claude-sonnet-4-20250514`)
+- **AI**: Claude API (`anthropic` SDK, model: `claude-sonnet-4-6`)
 - **Search**: Tavily API (web search) + GitHub Search API v3
 - **HTTP Client**: `httpx` (async, backend) + native `fetch` with `ReadableStream` (frontend)
 - **Icons**: `lucide-react`
@@ -75,19 +75,23 @@ npm run build            # Production build (runs tsc -b first, then vite build)
 npm run preview          # Preview production build
 npx tsc --noEmit         # TypeScript type check only
 
-# Backend
+# Backend (uses .venv virtual environment, Python 3.12)
 cd backend
-pip install -r requirements.txt
+source .venv/bin/activate        # Activate virtual environment (REQUIRED)
+pip install -r requirements.txt  # Install dependencies (inside venv)
 uvicorn main:app --reload --port 8000
 
-# Tests (from backend/)
+# Tests (from backend/, venv must be activated)
 cd backend
+source .venv/bin/activate
 pytest -v --ignore=tests/test_live_smoke.py --ignore=tests/test_live_consistency.py   # Mocked tests (66 tests, no API keys needed)
 pytest -v -m live_api                         # Live API tests (requires ANTHROPIC_API_KEY + TAVILY_API_KEY)
 pytest -v                                     # All tests
 ```
 
 No linters or formatters are configured. Backend test suite uses `pytest` + `pytest-asyncio`.
+
+**Virtual Environment**: Backend uses `backend/.venv/` (Python 3.12). Always activate it before running any backend commands (`source backend/.venv/bin/activate`). Do NOT use system Python or install packages globally.
 
 ## Environment Variables
 
@@ -119,18 +123,23 @@ User input → POST /api/analyze { idea, mode } → SSE streaming response
 - `POST /api/analyze`: SSE endpoint, accepts `{ idea: str, mode: str }`, streams events
 - `GET /health`: Health check endpoint returning `{ status: "ok" }`
 - CORS configured with permissive `allow_origins=["*"]`
-- Request validation: `idea` max 500 characters, `mode` must be one of `hackathon`/`startup`/`sideproject`
+- Request validation: `idea` max 500 characters, `mode` must be one of `hackathon`/`sideproject`
 - Creates a new `IdeaAnalyzer` instance per request with env-based API keys
 
 **`backend/analyzer.py`** — `IdeaAnalyzer` class:
 - `analyze(idea, mode)`: Async generator yielding SSE events for each pipeline step
-- `_search_web(idea)`: Two Tavily API calls (general + competitor-focused), deduplicates by URL, returns up to 10 results
-- `_search_github(idea)`: GitHub Search API, sorted by stars descending, returns up to 10 repos
-- `_analyze_feasibility(idea, mode, competitors, github_results)`: Claude prompt for technical feasibility scoring
-- `_analyze_differentiation(idea, competitors, github_results)`: Claude prompt with Devil's Advocate framing
-- `_generate_verdict(idea, mode, competitors, github_results, feasibility, differentiation)`: Claude prompt for final judgment
+- `_generate_search_queries(idea)`: Pre-step — Claude generates optimized English search queries from Korean idea
+- `_search_web(idea, ai_queries)`: 3-phase web search — parallel Tavily calls → sparse result refinement → Claude relevance filtering. Cached (10min TTL)
+- `_do_web_search_parallel(query1, query2, depth)`: Parallel Tavily search with dedup, supports basic/advanced depth
+- `_refine_search_queries(idea, current_results)`: Claude generates refined queries when initial results are sparse (<3)
+- `_filter_relevant(idea, competitors)`: Claude filters out non-competitor results (blog posts, tutorials, etc.)
+- `_search_github(idea, ai_query)`: GitHub Search API, sorted by stars descending, returns up to 10 repos. Cached (10min TTL)
+- `_call_claude_stream(prompt, fallback, max_tokens=4096)`: Streaming Claude call yielding progress events + final parsed result
+- `_stream_feasibility` / `_stream_differentiation` / `_stream_verdict`: Step-specific streaming wrappers
+- `_build_feasibility_prompt` / `_build_differentiation_prompt` / `_build_verdict_prompt`: Prompt builders for each analysis step
 - `_parse_json_safe(text, fallback)`: Robust JSON parser — tries direct parse, markdown code block extraction, then `{...}` extraction
 - `_fallback_*()` methods: Deterministic fallback results when Claude API is unavailable
+- Module-level `_search_cache` with 10-minute TTL for Tavily and GitHub results
 
 ### Frontend Architecture
 
@@ -179,18 +188,18 @@ All API response shapes are typed:
 
 Request body:
 ```json
-{ "idea": "string", "mode": "hackathon" | "startup" | "sideproject" }
+{ "idea": "string", "mode": "hackathon" | "sideproject" }
 ```
 
 SSE stream events:
 - `step_start`: `{ "step": 1-5, "title": "string", "description": "string" }`
 - `step_result`: `{ "step": 1-5, "result": { ... } }` (result shape varies by step)
+- `step_progress`: `{ "step": 1-5, "text": "AI 응답 생성 중... (N자)" }` (streaming progress for steps 3-5)
 - `done`: `{ "message": "분석 완료" }`
 
 Mode context mapping:
-- `hackathon` → 4시간 해커톤 (1인 개발자)
-- `startup` → 초기 스타트업 (3-5명 팀, 3개월)
-- `sideproject` → 사이드 프로젝트 (1-2명, 주말 개발)
+- `hackathon` → 5시간 이내, 1인 개발자, 바이브코딩 환경
+- `sideproject` → 주말 개발, 1~2인, 배포까지 목표
 
 ### Verdict System
 

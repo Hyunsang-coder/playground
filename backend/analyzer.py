@@ -1,8 +1,29 @@
 import json
 import asyncio
+import time
 from typing import AsyncGenerator
 import httpx
 import anthropic
+
+# Module-level in-memory TTL cache for external API results
+# Key: "namespace:query", Value: (timestamp, result)
+_search_cache: dict[str, tuple[float, dict]] = {}
+_CACHE_TTL = 600  # 10 minutes
+
+
+def _cache_get(key: str) -> dict | None:
+    """Return cached result if still valid, else None."""
+    entry = _search_cache.get(key)
+    if entry and (time.time() - entry[0]) < _CACHE_TTL:
+        return entry[1]
+    if entry:
+        del _search_cache[key]
+    return None
+
+
+def _cache_set(key: str, result: dict) -> None:
+    """Store result in cache."""
+    _search_cache[key] = (time.time(), result)
 
 
 class IdeaAnalyzer:
@@ -94,7 +115,7 @@ class IdeaAnalyzer:
 
         try:
             response = await self.anthropic_client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-6",
                 max_tokens=256,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -123,6 +144,12 @@ class IdeaAnalyzer:
         query1 = ai_queries[0] if ai_queries and len(ai_queries) > 0 else f"{idea} tool service app"
         query2 = ai_queries[1] if ai_queries and len(ai_queries) > 1 else f"{idea} alternative competitor similar"
 
+        # Check cache first (key combines both queries)
+        cache_key = f"web:{query1}|{query2}"
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached
+
         try:
             # Phase 1: Parallel basic search with extended snippets
             competitors = await self._do_web_search_parallel(query1, query2, depth="basic")
@@ -144,11 +171,13 @@ class IdeaAnalyzer:
             if competitors and self.anthropic_client:
                 competitors = await self._filter_relevant(idea, competitors)
 
-            return {
+            result = {
                 "competitors": competitors[:10],
                 "raw_count": len(competitors),
                 "summary": f"웹에서 {len(competitors)}개의 관련 결과를 발견했습니다.",
             }
+            _cache_set(cache_key, result)
+            return result
         except Exception as e:
             return {"competitors": [], "summary": f"검색 중 오류: {str(e)}", "raw_count": 0}
 
@@ -225,7 +254,7 @@ class IdeaAnalyzer:
 
         try:
             response = await self.anthropic_client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-6",
                 max_tokens=128,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -257,7 +286,7 @@ class IdeaAnalyzer:
 
         try:
             response = await self.anthropic_client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-6",
                 max_tokens=128,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -269,14 +298,18 @@ class IdeaAnalyzer:
             return competitors
 
     async def _search_github(self, idea: str, ai_query: str = "") -> dict:
-        """Search GitHub for similar projects with AI-optimized query."""
+        """Search GitHub for similar projects with AI-optimized query (cached)."""
+        query = (ai_query or idea).replace(" ", "+")
+
+        # Check cache first
+        cached = _cache_get(f"github:{query}")
+        if cached is not None:
+            return cached
+
         try:
             headers = {"Accept": "application/vnd.github.v3+json"}
             if self.github_token:
                 headers["Authorization"] = f"token {self.github_token}"
-
-            # Use AI-generated query or fall back to raw idea
-            query = (ai_query or idea).replace(" ", "+")
 
             async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.get(
@@ -296,15 +329,18 @@ class IdeaAnalyzer:
                         "updated": item.get("updated_at", "")[:10],
                     })
 
-                return {
+                result = {
                     "repos": repos,
                     "total_count": data.get("total_count", 0),
                     "summary": f"GitHub에서 {data.get('total_count', 0)}개의 관련 저장소를 발견했습니다.",
                 }
+
+                _cache_set(f"github:{query}", result)
+                return result
         except Exception as e:
             return {"repos": [], "total_count": 0, "summary": f"GitHub 검색 중 오류: {str(e)}"}
 
-    async def _call_claude_stream(self, prompt: str, fallback: dict, max_tokens: int = 1024) -> AsyncGenerator[dict, None]:
+    async def _call_claude_stream(self, prompt: str, fallback: dict, max_tokens: int = 4096) -> AsyncGenerator[dict, None]:
         """Call Claude with streaming, yielding progress events and final result."""
         if not self.anthropic_client:
             yield {"type": "result", "result": fallback}
@@ -314,7 +350,7 @@ class IdeaAnalyzer:
             collected_text = ""
             char_count = 0
             async with self.anthropic_client.messages.stream(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-6",
                 max_tokens=max_tokens,
                 messages=[{"role": "user", "content": prompt}],
             ) as stream:

@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-go: #10b981;
+  --color-pivot: #f59e0b;
+  --color-kill: #f43f5e;
+  --color-brand: #6366f1;
+
+  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-fade-in: fadeIn 0.5s ease-out;
+  --animate-slide-up: slideUp 0.4s ease-out;
+  --animate-verdict-reveal: verdictReveal 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-score-count: scoreCount 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-verdict-glow: verdictGlow 2s ease-in-out infinite;
+}
+
+@keyframes fadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes slideUp {
+  0% { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes verdictReveal {
+  0% { opacity: 0; transform: scale(0.3); }
+  50% { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes scoreCount {
+  0% { opacity: 0; transform: translateY(30px) scale(0.5); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes verdictGlow {
+  0%, 100% { box-shadow: 0 0 20px var(--verdict-glow-color, rgba(99,102,241,0.15)); }
+  50% { box-shadow: 0 0 40px var(--verdict-glow-color, rgba(99,102,241,0.3)); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@layer base {
+  body {
+    @apply text-slate-800 antialiased;
+    background-color: #fafaf9;
+    background-image:
+      radial-gradient(at 15% 0%, rgba(99, 102, 241, 0.06) 0%, transparent 50%),
+      radial-gradient(at 85% 100%, rgba(16, 185, 129, 0.04) 0%, transparent 50%);
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  .score-ring {
+    @apply relative flex items-center justify-center;
+  }
+
+  .verdict-badge {
+    @apply inline-flex items-center gap-2 rounded-full px-6 py-3 text-2xl font-black tracking-wider;
+  }
+
+  .step-card {
+    @apply rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm transition-shadow hover:shadow-md;
+  }
+
+  .shimmer-skeleton {
+    background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

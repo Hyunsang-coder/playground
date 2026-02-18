@@ -1,3 +1,5 @@
+"use client";
+
 import { CheckCircle2, Loader2, Circle, Globe, Github, Brain, Swords, Gavel } from "lucide-react";
 import type { AnalysisStep } from "../types";
 import CompetitorList from "./CompetitorList";
@@ -25,8 +27,8 @@ function StepIcon({ stepNum, className }: { stepNum: number; className: string }
 
 function StatusBadge({ status }: { status: string }) {
   if (status === "done") return <CheckCircle2 className="h-5 w-5 text-go" />;
-  if (status === "loading") return <Loader2 className="h-5 w-5 text-pivot animate-spin" />;
-  return <Circle className="h-5 w-5 text-gray-600" />;
+  if (status === "loading") return <Loader2 className="h-5 w-5 text-brand animate-spin" />;
+  return <Circle className="h-5 w-5 text-slate-300" />;
 }
 
 export default function StepCard({ step, idea, onReanalyze }: Props) {
@@ -37,22 +39,22 @@ export default function StepCard({ step, idea, onReanalyze }: Props) {
         <div
           className={`flex h-10 w-10 items-center justify-center rounded-xl ${
             step.status === "done"
-              ? "bg-go/20 text-go"
+              ? "bg-emerald-50 text-go"
               : step.status === "loading"
-                ? "bg-pivot/20 text-pivot"
-                : "bg-gray-800 text-gray-500"
+                ? "bg-indigo-50 text-brand"
+                : "bg-slate-100 text-slate-400"
           }`}
         >
           <StepIcon stepNum={step.step} className="h-5 w-5" />
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="font-bold text-lg">{step.title}</h3>
+            <h3 className="font-bold text-lg text-slate-800">{step.title}</h3>
             <StatusBadge status={step.status} />
           </div>
-          <p className="text-sm text-gray-400">{step.description}</p>
+          <p className="text-sm text-slate-500">{step.description}</p>
         </div>
-        <span className="text-sm font-mono text-gray-500">
+        <span className="text-sm font-mono text-slate-400">
           Step {step.step}/5
         </span>
       </div>
@@ -72,11 +74,11 @@ export default function StepCard({ step, idea, onReanalyze }: Props) {
       {step.status === "loading" && (
         <div className="mt-4 space-y-3">
           {step.progressText && (
-            <div className="text-sm text-pivot animate-pulse">{step.progressText}</div>
+            <div className="text-sm text-brand animate-pulse">{step.progressText}</div>
           )}
-          <div className="h-4 w-3/4 animate-pulse rounded bg-gray-800" />
-          <div className="h-4 w-1/2 animate-pulse rounded bg-gray-800" />
-          <div className="h-4 w-2/3 animate-pulse rounded bg-gray-800" />
+          <div className="h-4 w-3/4 rounded shimmer-skeleton" />
+          <div className="h-4 w-1/2 rounded shimmer-skeleton" />
+          <div className="h-4 w-2/3 rounded shimmer-skeleton" />
         </div>
       )}
     </div>

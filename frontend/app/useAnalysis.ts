@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useCallback } from "react";
 import type { AnalysisStep } from "./types";
 
@@ -38,8 +40,6 @@ export function useAnalysis() {
 
         for (const line of lines) {
           if (line.startsWith("event:")) {
-            const eventType = line.slice(6).trim();
-            // Next line should be data
             continue;
           }
           if (line.startsWith("data:")) {
@@ -48,9 +48,7 @@ export function useAnalysis() {
 
             try {
               const data = JSON.parse(dataStr);
-              const eventLine = lines.find((l) => l.startsWith("event:"));
 
-              // Determine event type from the data or previous event line
               if (data.step !== undefined && data.title) {
                 // step_start event
                 setSteps((prev) => [

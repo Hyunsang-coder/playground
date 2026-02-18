@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { Search, Zap, Coffee } from "lucide-react";
 
@@ -37,20 +39,20 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
           onChange={(e) => setIdea(e.target.value)}
           placeholder="아이디어를 한 줄로 입력하세요..."
           rows={2}
-          className="w-full resize-none rounded-2xl border border-gray-700 bg-gray-900 px-4 sm:px-6 py-4 text-lg sm:text-xl text-gray-100 placeholder-gray-500 outline-none transition-colors focus:border-kill/50 focus:ring-2 focus:ring-kill/20"
+          className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 sm:px-6 py-4 text-lg sm:text-xl text-slate-800 placeholder-slate-400 shadow-sm outline-none transition-all focus:border-brand/50 focus:ring-2 focus:ring-brand/10 focus:shadow-md"
           disabled={isLoading}
         />
       </div>
 
       {/* Example ideas */}
       <div className="flex flex-wrap gap-2">
-        <span className="text-sm text-gray-500">예시:</span>
+        <span className="text-sm text-slate-400">예시:</span>
         {EXAMPLES.map((ex) => (
           <button
             key={ex}
             type="button"
             onClick={() => setIdea(ex)}
-            className="rounded-full border border-gray-700 px-3 py-1 text-sm text-gray-400 transition-colors hover:border-gray-500 hover:text-gray-200"
+            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-500 shadow-sm transition-all hover:border-brand/30 hover:text-brand hover:shadow"
           >
             {ex}
           </button>
@@ -68,8 +70,8 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
               onClick={() => setMode(m.value)}
               className={`flex items-center gap-1.5 sm:gap-2 rounded-xl border px-2.5 sm:px-4 py-3 text-sm transition-all ${
                 mode === m.value
-                  ? "border-kill/50 bg-kill/10 text-kill"
-                  : "border-gray-700 text-gray-400 hover:border-gray-500"
+                  ? "border-brand/40 bg-brand/5 text-brand shadow-sm"
+                  : "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50"
               }`}
             >
               <Icon className="h-4 w-4 shrink-0" />
@@ -86,10 +88,10 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
       <button
         type="submit"
         disabled={!idea.trim() || isLoading}
-        className="flex w-full items-center justify-center gap-3 rounded-2xl bg-kill px-6 sm:px-8 py-3.5 sm:py-4 text-lg sm:text-xl font-bold text-white transition-all hover:bg-red-600 disabled:opacity-40 disabled:hover:bg-kill"
+        className="flex w-full items-center justify-center gap-3 rounded-2xl bg-brand px-6 sm:px-8 py-3.5 sm:py-4 text-lg sm:text-xl font-bold text-white shadow-lg shadow-brand/20 transition-all hover:bg-indigo-600 hover:shadow-xl hover:shadow-brand/25 disabled:opacity-40 disabled:shadow-none disabled:hover:bg-brand"
       >
         <Search className="h-6 w-6" />
-        {isLoading ? "분석 중..." : "이 아이디어를 죽여줘"}
+        {isLoading ? "분석 중..." : "이 아이디어를 검증하기"}
       </button>
     </form>
   );

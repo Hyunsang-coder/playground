@@ -152,8 +152,6 @@ ${githubList}
     {"name": "제품/프로젝트명", "similarity": 0-100, "weakness": "약점"}
   ],
   "unique_angles": ["차별화 포인트 1", "차별화 포인트 2"],
-  "devil_arguments": ["이미 있는데: ...", "이게 되겠어: ...", "누가 써: ..."],
-  "pivot_suggestions": ["대안 아이디어 1", "대안 아이디어 2"],
   "summary": "한줄 종합 (뼈 때리는 한마디)"
 }`;
 }
@@ -183,7 +181,7 @@ export function buildVerdictPrompt(
 
 차별화:
 - 경쟁 점수: ${differentiation.competition_score ?? 50}/100
-- Devil's Arguments: ${JSON.stringify(differentiation.devil_arguments || [])}
+- 차별화 포인트: ${JSON.stringify(differentiation.unique_angles || [])}
 
 반드시 순수 JSON으로만 응답하세요:
 
@@ -198,7 +196,11 @@ export function buildVerdictPrompt(
     "timing": 0-100
   },
   "one_liner": "한 줄 판정 이유",
-  "recommendation": "구체적 추천 행동",
-  "alternative_ideas": ["대안 1", "대안 2", "대안 3"]
-}`;
+  "recommendation": "1~2문장 이내의 간결한 추천 행동",
+  "alternative_ideas": ["대안 1 (10자 이내 키워드)", "대안 2", "대안 3"]
+}
+
+주의:
+- recommendation은 1~2문장으로 핵심만 간결하게 작성하세요.
+- alternative_ideas는 각 항목을 10자 이내의 짧은 키워드/제목으로 작성하세요.`;
 }

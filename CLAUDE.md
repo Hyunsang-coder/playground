@@ -180,7 +180,7 @@ All API response shapes are typed:
 - `WebSearchResult` — `{ competitors: Competitor[], raw_count, summary }`
 - `GitHubSearchResult` — `{ repos: GitHubRepo[], total_count, summary }`
 - `FeasibilityResult` — `{ overall_feasibility, score, vibe_coding_difficulty, bottlenecks, tech_requirements, key_risks, time_estimate, summary }`
-- `DifferentiationResult` — `{ competition_level, competition_score, existing_solutions, unique_angles, devil_arguments, pivot_suggestions, summary }`
+- `DifferentiationResult` — `{ competition_level, competition_score, existing_solutions, unique_angles, devil_arguments (string), summary }`
 - `VerdictResult` — `{ verdict, confidence, overall_score, scores: VerdictScores, one_liner, recommendation, alternative_ideas }`
 - `AnalysisStep` — `{ step, title, description, status: "pending"|"loading"|"done", result?, progressText? }`
 
@@ -271,4 +271,3 @@ Stability is the top priority. Each external service has independent fallback:
 - Single server: `npm run dev` starts Next.js on port 3000 with both frontend and API routes.
 - No `.env.local` is committed; create `frontend/.env.local` and fill in API keys.
 - SSE streaming uses `ReadableStream` + `TextEncoder` on server and manual `ReadableStream` parsing on the client (not the browser `EventSource` API, since POST requests are needed).
-- The `backend/` directory contains the legacy Python (FastAPI) implementation, preserved for reference. It is no longer used at runtime.

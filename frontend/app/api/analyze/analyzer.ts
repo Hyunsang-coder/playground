@@ -293,7 +293,10 @@ export class IdeaAnalyzer {
       );
       const data = await resp.json();
 
-      const repos = (data.items || []).map((item: Record<string, unknown>) => ({
+      const twoYearsAgo = new Date();
+      twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+
+      const allRepos = (data.items || []).map((item: Record<string, unknown>) => ({
         name: (item.full_name as string) || "",
         description: ((item.description as string) || "").slice(0, 200),
         stars: (item.stargazers_count as number) || 0,
@@ -302,10 +305,15 @@ export class IdeaAnalyzer {
         updated: ((item.updated_at as string) || "").slice(0, 10),
       }));
 
+      const repos = allRepos.filter(
+        (r: { stars: number; updated: string }) =>
+          r.stars >= 50 && new Date(r.updated) >= twoYearsAgo
+      );
+
       const result: GitHubSearchResult = {
         repos,
         total_count: (data.total_count as number) || 0,
-        summary: `GitHub에서 ${data.total_count || 0}개의 관련 저장소를 발견했습니다.`,
+        summary: `GitHub에서 ${data.total_count || 0}개 중 유의미한 저장소 ${repos.length}개를 발견했습니다.`,
       };
 
       cacheSet(`github:${query}`, result);

@@ -1,6 +1,6 @@
 "use client";
 
-import { Swords, Lightbulb, AlertOctagon } from "lucide-react";
+import { Swords, Lightbulb } from "lucide-react";
 import type { DifferentiationResult } from "../types";
 
 interface Props {
@@ -52,20 +52,6 @@ export default function DifferentiationCard({ data }: Props) {
         </div>
       )}
 
-      {/* Devil's arguments */}
-      {data.devil_arguments.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="flex items-center gap-2 text-sm font-semibold text-kill">
-            <AlertOctagon className="h-4 w-4" /> 이 아이디어가 실패하는 이유
-          </h4>
-          {data.devil_arguments.map((arg, i) => (
-            <div key={i} className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-slate-600">
-              {i + 1}. {arg}
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* Unique angles */}
       {data.unique_angles.length > 0 && (
         <div className="space-y-2">
@@ -80,19 +66,6 @@ export default function DifferentiationCard({ data }: Props) {
         </div>
       )}
 
-      {/* Pivot suggestions */}
-      {data.pivot_suggestions.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="text-sm font-semibold text-slate-600">피벗 제안</h4>
-          <div className="flex flex-wrap gap-2">
-            {data.pivot_suggestions.map((s, i) => (
-              <span key={i} className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-sm text-amber-600">
-                {s}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

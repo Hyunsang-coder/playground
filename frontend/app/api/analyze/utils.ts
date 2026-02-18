@@ -45,8 +45,6 @@ export interface DifferentiationResult {
   competition_score: number;
   existing_solutions: { name: string; similarity: number; weakness: string }[];
   unique_angles: string[];
-  devil_arguments: string[];
-  pivot_suggestions: string[];
   summary: string;
 }
 
@@ -125,8 +123,6 @@ export function fallbackDifferentiation(
     competition_score: Math.max(0, 100 - compCount * 5),
     existing_solutions: [],
     unique_angles: [],
-    devil_arguments: ["AI 분석 없이는 구체적 약점을 파악할 수 없습니다"],
-    pivot_suggestions: [],
     summary: `경쟁 제품 ${compCount}개 기반 자동 판정`,
   };
 }
@@ -158,7 +154,17 @@ export function fallbackVerdict(
 // --- In-memory TTL cache (10 min) ---
 
 const CACHE_TTL = 600_000; // 10 minutes in ms
+const MAX_CACHE_SIZE = 100;
 const searchCache = new Map<string, { timestamp: number; result: unknown }>();
+
+function evictExpired(): void {
+  const now = Date.now();
+  for (const [key, entry] of searchCache) {
+    if (now - entry.timestamp >= CACHE_TTL) {
+      searchCache.delete(key);
+    }
+  }
+}
 
 export function cacheGet<T>(key: string): T | null {
   const entry = searchCache.get(key);
@@ -172,6 +178,14 @@ export function cacheGet<T>(key: string): T | null {
 }
 
 export function cacheSet(key: string, result: unknown): void {
+  if (searchCache.size >= MAX_CACHE_SIZE) {
+    evictExpired();
+  }
+  // If still full after eviction, drop oldest entry
+  if (searchCache.size >= MAX_CACHE_SIZE) {
+    const oldestKey = searchCache.keys().next().value;
+    if (oldestKey !== undefined) searchCache.delete(oldestKey);
+  }
   searchCache.set(key, { timestamp: Date.now(), result });
 }
 

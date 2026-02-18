@@ -54,8 +54,6 @@ export interface DifferentiationResult {
   competition_score: number;
   existing_solutions: ExistingSolution[];
   unique_angles: string[];
-  devil_arguments: string[];
-  pivot_suggestions: string[];
   summary: string;
 }
 

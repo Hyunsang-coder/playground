@@ -1,4 +1,4 @@
-import { streamText } from "ai";
+import { streamText, convertToModelMessages } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 
 export async function POST(req: Request) {
@@ -18,8 +18,8 @@ ${JSON.stringify(analysisResults, null, 2)}
   const result = streamText({
     model: anthropic("claude-sonnet-4-6"),
     system: systemPrompt,
-    messages,
+    messages: await convertToModelMessages(messages),
   });
 
-  return result.toTextStreamResponse();
+  return result.toUIMessageStreamResponse();
 }

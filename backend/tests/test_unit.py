@@ -84,7 +84,7 @@ class TestFallbackFeasibility:
 
     def test_required_keys_present(self):
         result = self.analyzer._fallback_feasibility("anything")
-        required = {"overall_feasibility", "score", "tech_requirements", "key_risks", "time_estimate", "summary"}
+        required = {"overall_feasibility", "score", "vibe_coding_difficulty", "bottlenecks", "tech_requirements", "key_risks", "time_estimate", "summary"}
         assert required.issubset(set(result.keys()))
 
 
@@ -203,7 +203,7 @@ class TestAnalyzeRequestValidation:
 
     def test_valid_modes(self):
         from main import AnalyzeRequest
-        for mode in ["hackathon", "startup", "sideproject"]:
+        for mode in ["hackathon", "sideproject"]:
             req = AnalyzeRequest(idea="test idea", mode=mode)
             assert req.mode == mode
 

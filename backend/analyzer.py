@@ -33,8 +33,8 @@ class IdeaAnalyzer:
         github_results = await self._search_github(idea, search_queries.get("github_query", ""))
         yield {"event": "step_result", "data": {"step": 2, "result": github_results}}
 
-        # Step 3: Technical feasibility analysis (LLM with streaming)
-        yield {"event": "step_start", "data": {"step": 3, "title": "기술 실현성 분석", "description": "AI가 기술적 구현 가능성을 분석하고 있습니다..."}}
+        # Step 3: Vibe coding feasibility analysis (LLM with streaming)
+        yield {"event": "step_start", "data": {"step": 3, "title": "바이브코딩 실현성 분석", "description": "AI가 바이브코딩 난이도와 병목 지점을 분석하고 있습니다..."}}
         await asyncio.sleep(0.3)
 
         feasibility = None
@@ -354,11 +354,10 @@ class IdeaAnalyzer:
 
     def _build_feasibility_prompt(self, idea: str, mode: str, competitors: dict, github_results: dict) -> str:
         mode_context = {
-            "hackathon": "4시간 해커톤 (1인 개발자)",
-            "startup": "초기 스타트업 (3-5명 팀, 3개월)",
-            "sideproject": "사이드 프로젝트 (1-2명, 주말 개발)",
+            "hackathon": "5시간 이내, 1인 개발자, 바이브코딩 환경",
+            "sideproject": "주말 개발, 1~2인, 배포까지 목표",
         }
-        return f"""당신은 기술 실현성을 냉정하게 분석하는 시니어 개발자입니다.
+        return f"""당신은 바이브코딩(AI 어시스턴트와 함께 코딩하는 환경) 실현성을 냉정하게 분석하는 시니어 개발자입니다.
 
 아이디어: {idea}
 개발 환경: {mode_context.get(mode, mode_context["hackathon"])}
@@ -366,11 +365,30 @@ class IdeaAnalyzer:
 기존 경쟁 제품 수: {competitors.get("raw_count", 0)}개
 GitHub 유사 프로젝트: {github_results.get("total_count", 0)}개
 
-다음을 분석해주세요. 반드시 순수 JSON으로만 응답하세요:
+다음을 분석해주세요:
+
+1. 바이브코딩 난이도:
+   - easy(쉬움): CRUD, Claude API 호출, 단순 UI
+   - medium(보통): 파일 파싱, 외부 API 1~2개 연동
+   - hard(어려움): WebSocket, 실시간 동기화, 복잡한 인증, 이진 파일 처리
+
+2. 병목 지점: AI가 틀리거나 막힐 가능성이 높은 구체적인 기능 2~3개
+   예) "OAuth 구현에서 토큰 갱신 로직", "PDF 테이블 파싱"
+
+3. 외부 의존성 리스크:
+   - 인증 필요 여부 (시간 블랙홀 위험)
+   - 실시간 데이터 필요 여부
+   - 유료 API 의존 여부
+
+4. 해커톤/사이드 프로젝트 맥락에서의 실현 가능성 총평
+
+반드시 순수 JSON으로만 응답하세요:
 
 {{
   "overall_feasibility": "possible" | "partial" | "difficult",
   "score": 0-100,
+  "vibe_coding_difficulty": "easy" | "medium" | "hard",
+  "bottlenecks": ["AI가 막힐 가능성이 높은 구체적 기능 1", "구체적 기능 2"],
   "tech_requirements": [
     {{"name": "기술/API명", "available": true/false, "difficulty": "easy|medium|hard", "note": "한줄 설명"}}
   ],
@@ -421,7 +439,7 @@ GitHub 유사 프로젝트:
 }}"""
 
     def _build_verdict_prompt(self, idea: str, mode: str, competitors: dict, github_results: dict, feasibility: dict, differentiation: dict) -> str:
-        return f"""당신은 해커톤 아이디어 심판관입니다. 모든 분석 결과를 종합하여 최종 판정을 내리세요.
+        return f"""당신은 해커톤/사이드 프로젝트 아이디어 심판관입니다. 혼자 만드는 개발자 관점에서 모든 분석 결과를 종합하여 최종 판정을 내리세요.
 
 아이디어: {idea}
 모드: {mode}
@@ -486,6 +504,8 @@ GitHub 유사 프로젝트:
         return {
             "overall_feasibility": "partial",
             "score": 50,
+            "vibe_coding_difficulty": "medium",
+            "bottlenecks": ["LLM 분석 실패 — fallback 데이터입니다"],
             "tech_requirements": [],
             "key_risks": ["LLM 분석 실패 — fallback 데이터입니다"],
             "time_estimate": "알 수 없음",

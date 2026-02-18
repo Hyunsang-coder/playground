@@ -58,6 +58,8 @@ SAMPLE_GITHUB = {
 SAMPLE_FEASIBILITY = {
     "overall_feasibility": "possible",
     "score": 75,
+    "vibe_coding_difficulty": "medium",
+    "bottlenecks": ["코드 컨텍스트 윈도우 제한으로 대규모 파일 분석 어려움", "Git diff 파싱 정확도"],
     "tech_requirements": [
         {"name": "Claude API", "available": True, "difficulty": "easy", "note": "API 키만 있으면 됨"}
     ],

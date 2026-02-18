@@ -22,7 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-VALID_MODES = {"hackathon", "startup", "sideproject"}
+VALID_MODES = {"hackathon", "sideproject"}
 
 
 class AnalyzeRequest(BaseModel):

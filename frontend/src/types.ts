@@ -35,6 +35,8 @@ export interface TechRequirement {
 export interface FeasibilityResult {
   overall_feasibility: "possible" | "partial" | "difficult";
   score: number;
+  vibe_coding_difficulty: "easy" | "medium" | "hard";
+  bottlenecks: string[];
   tech_requirements: TechRequirement[];
   key_risks: string[];
   time_estimate: string;

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Zap, Rocket, Coffee } from "lucide-react";
+import { Search, Zap, Coffee } from "lucide-react";
 
 interface Props {
   onSubmit: (idea: string, mode: string) => void;
@@ -7,9 +7,8 @@ interface Props {
 }
 
 const MODES = [
-  { value: "hackathon", label: "해커톤", icon: Zap, desc: "4시간, 1인 개발" },
-  { value: "startup", label: "스타트업", icon: Rocket, desc: "3개월, 팀 개발" },
-  { value: "sideproject", label: "사이드", icon: Coffee, desc: "주말 개발" },
+  { value: "hackathon", label: "해커톤", icon: Zap, desc: "5시간 이내, 1인 바이브코딩" },
+  { value: "sideproject", label: "사이드", icon: Coffee, desc: "주말 개발, 배포까지" },
 ];
 
 const EXAMPLES = [
@@ -59,7 +58,7 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
       </div>
 
       {/* Mode selector */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
         {MODES.map((m) => {
           const Icon = m.icon;
           return (

@@ -50,6 +50,10 @@ def validate_feasibility_result(data: dict):
     assert "score" in data
     assert isinstance(data["score"], (int, float))
     assert 0 <= data["score"] <= 100
+    assert "vibe_coding_difficulty" in data
+    assert data["vibe_coding_difficulty"] in ("easy", "medium", "hard")
+    assert "bottlenecks" in data
+    assert isinstance(data["bottlenecks"], list)
     assert "tech_requirements" in data
     assert isinstance(data["tech_requirements"], list)
     for req in data["tech_requirements"]:

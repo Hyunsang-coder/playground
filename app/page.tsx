@@ -1,17 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, RotateCcw } from "lucide-react";
+import { Loader2, RotateCcw, Download, FileText, FileJson } from "lucide-react";
 import Header from "./components/Header";
 import IdeaInput from "./components/IdeaInput";
 import StepCard from "./components/StepCard";
 import ChatPanel from "./components/ChatPanel";
 import { useAnalysis } from "./useAnalysis";
+import { exportAsMarkdown, exportAsJson, downloadFile } from "./exportUtils";
 
 export default function Page() {
   const { steps, isAnalyzing, error, analyze, reset } = useAnalysis();
   const [currentIdea, setCurrentIdea] = useState("");
   const [enabledSteps, setEnabledSteps] = useState<number[]>([1, 2, 3, 4, 5]);
+
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   const hasResults = steps.length > 0 || isAnalyzing;
   const completedSteps = steps.filter((s) => s.status === "done").length;
@@ -28,6 +31,19 @@ export default function Page() {
     setCurrentIdea("");
     setEnabledSteps([1, 2, 3, 4, 5]);
     reset();
+  };
+
+  const handleExport = (format: "md" | "json") => {
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const slug = currentIdea.slice(0, 20).replace(/\s+/g, "_");
+    if (format === "md") {
+      const content = exportAsMarkdown(currentIdea, steps);
+      downloadFile(content, `valid8_${slug}_${timestamp}.md`, "text/markdown;charset=utf-8");
+    } else {
+      const content = exportAsJson(currentIdea, steps);
+      downloadFile(content, `valid8_${slug}_${timestamp}.json`, "application/json;charset=utf-8");
+    }
+    setShowExportMenu(false);
   };
 
   return (
@@ -65,14 +81,48 @@ export default function Page() {
                     &ldquo;{currentIdea}&rdquo;
                   </p>
                 </div>
-                <button
-                  onClick={handleReset}
-                  disabled={isAnalyzing}
-                  className="flex shrink-0 items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  새 검증
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  {allDone && (
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowExportMenu((v) => !v)}
+                        className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700 hover:bg-slate-50"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        내보내기
+                      </button>
+                      {showExportMenu && (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
+                          <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                            <button
+                              onClick={() => handleExport("md")}
+                              className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-600 transition-colors hover:bg-slate-50"
+                            >
+                              <FileText className="h-4 w-4 text-slate-400" />
+                              Markdown (.md)
+                            </button>
+                            <button
+                              onClick={() => handleExport("json")}
+                              className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-600 transition-colors hover:bg-slate-50"
+                            >
+                              <FileJson className="h-4 w-4 text-slate-400" />
+                              JSON (.json)
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  <button
+                    onClick={handleReset}
+                    disabled={isAnalyzing}
+                    className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    새 검증
+                  </button>
+                </div>
               </div>
 
               {/* Progress bar */}

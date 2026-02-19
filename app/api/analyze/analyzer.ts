@@ -25,6 +25,7 @@ import {
   buildRefineSearchQueriesPrompt,
   buildFilterRelevantPrompt,
   buildDataExtractionPrompt,
+  buildDataJudgmentPrompt,
   buildFeasibilityPrompt,
   buildDifferentiationPrompt,
   buildVerdictPrompt,
@@ -817,6 +818,49 @@ export class IdeaAnalyzer {
     };
   }
 
+  private async verifyApiUrl(url: string): Promise<boolean> {
+    if (!url) return false;
+    try {
+      const resp = await fetch(url, {
+        method: "HEAD",
+        signal: AbortSignal.timeout(5000),
+        redirect: "follow",
+      });
+      return resp.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  private async getClaudeDataJudgment(
+    dataSources: string[],
+    libraries: string[],
+    evidenceMap: Map<string, SearchEvidence>
+  ): Promise<DataAvailabilityResult | null> {
+    if (!this.anthropicApiKey || dataSources.length === 0) return null;
+
+    try {
+      const evidenceRecord: Record<string, { urls: string[]; snippets: string[] }> = {};
+      for (const [query, ev] of evidenceMap) {
+        evidenceRecord[query] = { urls: ev.urls, snippets: ev.snippets };
+      }
+
+      const prompt = buildDataJudgmentPrompt(dataSources, libraries, evidenceRecord);
+      const { text } = await generateText({
+        model: anthropic("claude-sonnet-4-6"),
+        maxOutputTokens: 1024,
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      const parsed = parseJsonSafe<Partial<DataAvailabilityResult>>(text.trim(), {});
+      if (!parsed || !Array.isArray(parsed.data_sources)) return null;
+
+      return parsed as DataAvailabilityResult;
+    } catch {
+      return null;
+    }
+  }
+
   private async checkDataAndLibraries(idea: string): Promise<DataAvailabilityResult> {
     if (!this.anthropicApiKey) {
       return fallbackDataAvailability();
@@ -835,14 +879,35 @@ export class IdeaAnalyzer {
         messages: [{ role: "user", content: extractionPrompt }],
       });
 
-      const extracted = parseJsonSafe<{ data_sources?: string[]; libraries?: string[] }>(
-        extractionText.trim(),
-        extractionFallback
-      );
+      type ExtractedSource = { name: string; search_queries: string[] };
+      const extracted = parseJsonSafe<{
+        data_sources?: Array<ExtractedSource | string>;
+        libraries?: string[];
+      }>(extractionText.trim(), extractionFallback);
 
-      const dataSources = Array.from(
-        new Set((extracted.data_sources || []).filter((x): x is string => typeof x === "string").map((x) => x.trim()).filter(Boolean))
-      ).slice(0, 3);
+      // Parse data sources: support both new {name, search_queries} and legacy string formats
+      const seen = new Set<string>();
+      const parsedSources: ExtractedSource[] = (extracted.data_sources || [])
+        .map((s): ExtractedSource | null => {
+          if (typeof s === "string") return s.trim() ? { name: s.trim(), search_queries: [] } : null;
+          if (s && typeof s === "object" && typeof s.name === "string" && s.name.trim()) {
+            return {
+              name: s.name.trim(),
+              search_queries: Array.isArray(s.search_queries)
+                ? s.search_queries.filter((q): q is string => typeof q === "string" && q.trim().length > 0)
+                : [],
+            };
+          }
+          return null;
+        })
+        .filter((s): s is ExtractedSource => {
+          if (!s || seen.has(s.name)) return false;
+          seen.add(s.name);
+          return true;
+        })
+        .slice(0, 3);
+
+      const dataSources = parsedSources.map((s) => s.name);
 
       const libraries = Array.from(
         new Set((extracted.libraries || []).filter((x): x is string => typeof x === "string").map((x) => x.trim()).filter(Boolean))
@@ -856,46 +921,87 @@ export class IdeaAnalyzer {
 
       const sourceQueriesByName = new Map<string, string[]>();
       const sourceQueries: string[] = [];
-      for (const source of dataSources) {
-        const queriesForSource = [
-          `${source} official API documentation`,
-          `${source} developer portal`,
-          `${source} scraping terms of service`,
-        ];
-        sourceQueriesByName.set(source, queriesForSource);
+      for (const src of parsedSources) {
+        const custom = src.search_queries.slice(0, 3);
+        const queriesForSource = custom.length >= 2
+          ? custom
+          : [
+              `${src.name} official API documentation`,
+              `${src.name} developer portal`,
+              `${src.name} scraping terms of service`,
+            ];
+        sourceQueriesByName.set(src.name, queriesForSource);
         sourceQueries.push(...queriesForSource);
       }
 
       const uniqueQueries = Array.from(new Set(sourceQueries));
       const evidenceMap = await this.doDataAvailabilitySearch(uniqueQueries, 9);
 
+      // Dual validation: rules + Claude judgment in parallel
+      const [ruleBasedDataSources, claudeJudgment, libraryResult] = await Promise.all([
+        Promise.all(
+          dataSources.map(async (source) => {
+            const evidence = this.mergeEvidenceByQueries(
+              evidenceMap,
+              sourceQueriesByName.get(source) || []
+            );
+            const robots = await this.checkRobotsPolicy(evidence.urls);
+            const judged = evaluateDataSourceWithRules({
+              urls: evidence.urls,
+              snippets: evidence.snippets,
+              robotsDisallowAll: robots.disallowAll,
+              robotsCheckedDomain: robots.domain,
+            });
+
+            return {
+              name: source,
+              has_official_api: judged.has_official_api,
+              crawlable: judged.crawlable,
+              evidence_url: judged.evidence_url,
+              blocking: judged.blocking,
+              note: judged.note,
+            };
+          })
+        ),
+        this.getClaudeDataJudgment(dataSources, libraries, evidenceMap),
+        Promise.all(libraries.map((library) => this.validateLibraryOnNpm(library))),
+      ]);
+
+      // Merge: Claude judgment primary, rules as fallback, then verify URLs
       const dataSourceResult = await Promise.all(
-        dataSources.map(async (source) => {
-          const evidence = this.mergeEvidenceByQueries(
-            evidenceMap,
-            sourceQueriesByName.get(source) || []
+        dataSources.map(async (source, i) => {
+          const ruleResult = ruleBasedDataSources[i];
+          const claudeSource = claudeJudgment?.data_sources?.find(
+            (s) => s.name.toLowerCase() === source.toLowerCase()
           );
-          const robots = await this.checkRobotsPolicy(evidence.urls);
-          const judged = evaluateDataSourceWithRules({
-            urls: evidence.urls,
-            snippets: evidence.snippets,
-            robotsDisallowAll: robots.disallowAll,
-            robotsCheckedDomain: robots.domain,
-          });
 
-          return {
-            name: source,
-            has_official_api: judged.has_official_api,
-            crawlable: judged.crawlable,
-            evidence_url: judged.evidence_url,
-            blocking: judged.blocking,
-            note: judged.note,
-          };
+          const merged = claudeSource
+            ? {
+                name: source,
+                has_official_api: Boolean(claudeSource.has_official_api),
+                crawlable: Boolean(claudeSource.crawlable),
+                evidence_url: claudeSource.evidence_url || ruleResult.evidence_url,
+                blocking: Boolean(claudeSource.blocking),
+                note: claudeSource.blocking === ruleResult.blocking
+                  ? claudeSource.note
+                  : `${claudeSource.note} (규칙 판정: ${ruleResult.blocking ? "블로킹" : "통과"} → AI 판정 우선)`,
+              }
+            : ruleResult;
+
+          // URL HEAD verification: confirm evidence URL is actually reachable
+          if (merged.evidence_url) {
+            const alive = await this.verifyApiUrl(merged.evidence_url);
+            if (alive && merged.has_official_api) {
+              merged.note = `${merged.note} (URL 검증 완료)`;
+            } else if (!alive && merged.has_official_api) {
+              merged.has_official_api = false;
+              merged.blocking = !merged.crawlable;
+              merged.note = `${merged.note} (근거 URL 접근 불가 — 수동 확인 필요)`;
+            }
+          }
+
+          return merged;
         })
-      );
-
-      const libraryResult = await Promise.all(
-        libraries.map((library) => this.validateLibraryOnNpm(library))
       );
 
       const hasBlockingIssues = dataSourceResult.some((source) => source.blocking);

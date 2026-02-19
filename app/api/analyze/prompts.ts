@@ -76,8 +76,12 @@ export function buildDataExtractionPrompt(idea: string): string {
 아이디어: ${idea}
 
 규칙:
-- data_sources: 외부 서비스/플랫폼 데이터 (최대 3개, 영어)
-  예) "Coupang product reviews", "Naver blog posts", "YouTube video metadata"
+- data_sources: 외부 서비스/플랫폼 데이터 (최대 3개)
+  - name: 데이터 소스명 (영어)
+  - search_queries: 해당 소스의 API/접근 가능성을 확인할 검색 쿼리 3개 (영어 2개 + 한국어 1개)
+    - 첫 번째: 공식 API 문서 검색 (예: "coupang open API developer documentation")
+    - 두 번째: 개발자 포털/가격 검색 (예: "coupang developer portal pricing free tier")
+    - 세 번째: 한국어 개발자 가이드 검색 (예: "쿠팡 오픈API 개발자 가이드")
 - libraries: 가능한 한 실제 npm 패키지명으로 작성 (최대 3개, 영어)
   예) "@tiptap/react", "pptxgenjs", "cheerio"
   정확한 패키지명을 모르면 "category:<설명>" 형식 사용
@@ -85,7 +89,12 @@ export function buildDataExtractionPrompt(idea: string): string {
 - 아이디어에 명확히 필요한 것만 포함
 
 반드시 순수 JSON으로만 응답:
-{"data_sources": ["string"], "libraries": ["string"]}`;
+{
+  "data_sources": [
+    {"name": "Coupang product reviews", "search_queries": ["coupang open API developer", "coupang developer portal pricing", "쿠팡 오픈API 가이드"]}
+  ],
+  "libraries": ["cheerio"]
+}`;
 }
 
 export function buildDataJudgmentPrompt(

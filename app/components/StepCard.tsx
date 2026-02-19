@@ -3,10 +3,8 @@
 import { CheckCircle2, Loader2, Circle, Globe, Github, Brain, Swords, Gavel } from "lucide-react";
 import type {
   AnalysisStep,
-  WebSearchResult,
-  GitHubSearchResult,
+  MarketAndDifferentiationResult,
   FeasibilityResult,
-  DifferentiationResult,
   VerdictResult,
 } from "../types";
 import CompetitorList from "./CompetitorList";
@@ -24,10 +22,8 @@ interface Props {
 function StepIcon({ stepNum, className }: { stepNum: number; className: string }) {
   switch (stepNum) {
     case 1: return <Globe className={className} />;
-    case 2: return <Github className={className} />;
-    case 3: return <Brain className={className} />;
-    case 4: return <Swords className={className} />;
-    case 5: return <Gavel className={className} />;
+    case 2: return <Brain className={className} />;
+    case 3: return <Gavel className={className} />;
     default: return <Circle className={className} />;
   }
 }
@@ -46,13 +42,12 @@ export default function StepCard({ step, idea, onReanalyze }: Props) {
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <div
-          className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-            step.status === "done"
+          className={`flex h-10 w-10 items-center justify-center rounded-xl ${step.status === "done"
               ? "bg-emerald-50 text-go"
               : step.status === "loading"
                 ? "bg-indigo-50 text-brand"
                 : "bg-slate-100 text-slate-400"
-          }`}
+            }`}
         >
           <StepIcon stepNum={step.step} className="h-5 w-5" />
         </div>
@@ -64,18 +59,22 @@ export default function StepCard({ step, idea, onReanalyze }: Props) {
           <p className="text-sm text-slate-500">{step.description}</p>
         </div>
         <span className="text-sm font-mono text-slate-400">
-          Step {step.step}/5
+          Step {step.step}/3
         </span>
       </div>
 
       {/* Result content */}
       {step.status === "done" && step.result != null ? (
-        <div className="mt-4 animate-fade-in">
-          {step.step === 1 && <CompetitorList data={result as WebSearchResult} />}
-          {step.step === 2 && <GitHubList data={result as GitHubSearchResult} />}
-          {step.step === 3 && <FeasibilityCard data={result as FeasibilityResult} />}
-          {step.step === 4 && <DifferentiationCard data={result as DifferentiationResult} />}
-          {step.step === 5 && <VerdictCard data={result as VerdictResult} idea={idea} onReanalyze={onReanalyze} />}
+        <div className="mt-4 animate-fade-in flex flex-col gap-4">
+          {step.step === 1 && (
+            <>
+              <CompetitorList data={(step.result as MarketAndDifferentiationResult).web} />
+              <GitHubList data={(step.result as MarketAndDifferentiationResult).github} />
+              <DifferentiationCard data={(step.result as MarketAndDifferentiationResult).differentiation} />
+            </>
+          )}
+          {step.step === 2 && <FeasibilityCard data={step.result as FeasibilityResult} />}
+          {step.step === 3 && <VerdictCard data={step.result as VerdictResult} idea={idea} onReanalyze={onReanalyze} />}
         </div>
       ) : null}
 

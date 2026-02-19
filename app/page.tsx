@@ -12,7 +12,7 @@ import { exportAsMarkdown, exportAsJson, downloadFile } from "./exportUtils";
 export default function Page() {
   const { steps, isAnalyzing, error, analyze, reset } = useAnalysis();
   const [currentIdea, setCurrentIdea] = useState("");
-  const [enabledSteps, setEnabledSteps] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [enabledSteps, setEnabledSteps] = useState<number[]>([1, 2, 3]);
 
   const [showExportMenu, setShowExportMenu] = useState(false);
 
@@ -29,7 +29,7 @@ export default function Page() {
 
   const handleReset = () => {
     setCurrentIdea("");
-    setEnabledSteps([1, 2, 3, 4, 5]);
+    setEnabledSteps([1, 2, 3]);
     reset();
   };
 
@@ -133,9 +133,8 @@ export default function Page() {
                 </div>
                 <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-700 ease-out ${
-                      allDone ? "bg-go" : "bg-brand"
-                    }`}
+                    className={`h-full rounded-full transition-all duration-700 ease-out ${allDone ? "bg-go" : "bg-brand"
+                      }`}
                     style={{ width: `${progress}%` }}
                   />
                 </div>

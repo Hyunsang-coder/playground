@@ -58,6 +58,12 @@ export interface DifferentiationResult {
   summary: string;
 }
 
+export interface MarketAndDifferentiationResult {
+  web: WebSearchResult;
+  github: GitHubSearchResult;
+  differentiation: DifferentiationResult;
+}
+
 export interface VerdictScores {
   competition: number;
   feasibility: number;

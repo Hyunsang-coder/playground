@@ -9,11 +9,9 @@ interface Props {
 }
 
 const STEPS = [
-  { step: 1, label: "경쟁 제품 탐색" },
-  { step: 2, label: "GitHub 유사 프로젝트" },
-  { step: 3, label: "바이브코딩 실현성" },
-  { step: 4, label: "차별화 분석" },
-  { step: 5, label: "종합 판정" },
+  { step: 1, label: "시장/차별성 분석" },
+  { step: 2, label: "실현성 및 데이터 검증" },
+  { step: 3, label: "종합 판정" },
 ];
 
 const EXAMPLES = [
@@ -25,8 +23,8 @@ const EXAMPLES = [
 
 export default function IdeaInput({ onSubmit, isLoading }: Props) {
   const [idea, setIdea] = useState("");
-  const [enabledSteps, setEnabledSteps] = useState<number[]>([1, 2, 3, 4, 5]);
-  const isStep5Only = enabledSteps.length === 1 && enabledSteps.includes(5);
+  const [enabledSteps, setEnabledSteps] = useState<number[]>([1, 2, 3]);
+  const isStep3Only = enabledSteps.length === 1 && enabledSteps.includes(3);
 
   const toggleStep = (step: number) => {
     setEnabledSteps((prev) =>
@@ -35,11 +33,11 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
   };
 
   const allSelected = enabledSteps.length === STEPS.length;
-  const toggleAll = () => setEnabledSteps(allSelected ? [] : [1, 2, 3, 4, 5]);
+  const toggleAll = () => setEnabledSteps(allSelected ? [] : [1, 2, 3]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!idea.trim() || isLoading || enabledSteps.length === 0 || isStep5Only) return;
+    if (!idea.trim() || isLoading || enabledSteps.length === 0 || isStep3Only) return;
     onSubmit(idea.trim(), enabledSteps);
   };
 
@@ -93,11 +91,10 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
                 key={item.step}
                 type="button"
                 onClick={() => toggleStep(item.step)}
-                className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all ${
-                  checked
+                className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all ${checked
                     ? "border-brand/40 bg-brand/5 text-brand"
                     : "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50"
-                }`}
+                  }`}
               >
                 {checked ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
                 <span>
@@ -111,15 +108,15 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
         {enabledSteps.length === 0 && (
           <p className="mt-3 text-xs text-rose-600">최소 1개 이상의 단계를 선택해야 합니다.</p>
         )}
-        {isStep5Only && (
-          <p className="mt-3 text-xs text-rose-600">종합 판정(5번)은 단독 선택할 수 없습니다. 1~4번 중 하나 이상을 함께 선택하세요.</p>
+        {isStep3Only && (
+          <p className="mt-3 text-xs text-rose-600">종합 판정(3번)은 단독 선택할 수 없습니다. 1~2번 중 하나 이상을 함께 선택하세요.</p>
         )}
       </div>
 
       {/* Submit button */}
       <button
         type="submit"
-        disabled={!idea.trim() || isLoading || enabledSteps.length === 0 || isStep5Only}
+        disabled={!idea.trim() || isLoading || enabledSteps.length === 0 || isStep3Only}
         className="flex w-full items-center justify-center gap-3 rounded-2xl bg-brand px-6 sm:px-8 py-3.5 sm:py-4 text-lg sm:text-xl font-bold text-white shadow-lg shadow-brand/20 transition-all hover:bg-indigo-600 hover:shadow-xl hover:shadow-brand/25 disabled:opacity-40 disabled:shadow-none disabled:hover:bg-brand"
       >
         <Search className="h-6 w-6" />

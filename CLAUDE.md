@@ -26,43 +26,41 @@ Built for the OKKY Vibe Coding Hackathon (2026.02.21, 4-hour development window)
 ```
 ├── CLAUDE.md
 ├── .gitignore
-└── frontend/
-    ├── package.json           # npm config
-    ├── next.config.ts         # Next.js config (no rewrites needed)
-    ├── tsconfig.json          # TypeScript config (strict)
-    ├── postcss.config.mjs     # PostCSS with Tailwind
-    ├── eslint.config.mjs      # ESLint config
-    ├── .env.local             # Environment variables (not committed)
-    └── app/
-        ├── layout.tsx         # Root layout (lang="ko")
-        ├── page.tsx           # Main page — routes between input and results views
-        ├── globals.css        # Tailwind layers + custom component classes
-        ├── types.ts           # All TypeScript interfaces for API data shapes
-        ├── useAnalysis.ts     # Custom hook — SSE stream parsing + state management
-        ├── components/
-        │   ├── Header.tsx           # App title with shield-check icon
-        │   ├── IdeaInput.tsx        # Idea textarea + mode selector + example chips
-        │   ├── StepCard.tsx         # Step wrapper with icon/status/loading skeleton
-        │   ├── CompetitorList.tsx   # Step 1 result — web competitor cards
-        │   ├── GitHubList.tsx       # Step 2 result — GitHub repo cards with stars
-        │   ├── FeasibilityCard.tsx  # Step 3 result — score + tech requirements + risks
-        │   ├── DifferentiationCard.tsx  # Step 4 result — competition level + devil's arguments
-        │   ├── VerdictCard.tsx      # Step 5 result — final verdict badge + score bars
-        │   └── ChatPanel.tsx        # AI follow-up chat after analysis
-        └── api/
-            ├── chat/
-            │   └── route.ts         # POST — AI follow-up chat (Vercel AI SDK streamText)
-            └── analyze/
-                ├── route.ts         # POST — SSE streaming endpoint (validation → stream)
-                ├── analyzer.ts      # IdeaAnalyzer class — 5-step pipeline
-                ├── prompts.ts       # Korean prompt templates (6 prompt builders)
-                └── utils.ts         # parseJsonSafe, fallback functions, cache, types
+├── package.json               # npm config
+├── next.config.ts             # Next.js config (no rewrites needed)
+├── tsconfig.json              # TypeScript config (strict)
+├── postcss.config.mjs         # PostCSS with Tailwind
+├── eslint.config.mjs          # ESLint config
+├── .env.local                 # Environment variables (not committed)
+└── app/
+    ├── layout.tsx         # Root layout (lang="ko")
+    ├── page.tsx           # Main page — routes between input and results views
+    ├── globals.css        # Tailwind layers + custom component classes
+    ├── types.ts           # All TypeScript interfaces for API data shapes
+    ├── useAnalysis.ts     # Custom hook — SSE stream parsing + state management
+    ├── components/
+    │   ├── Header.tsx           # App title with shield-check icon
+    │   ├── IdeaInput.tsx        # Idea textarea + mode selector + example chips
+    │   ├── StepCard.tsx         # Step wrapper with icon/status/loading skeleton
+    │   ├── CompetitorList.tsx   # Step 1 result — web competitor cards
+    │   ├── GitHubList.tsx       # Step 2 result — GitHub repo cards with stars
+    │   ├── FeasibilityCard.tsx  # Step 3 result — score + tech requirements + risks
+    │   ├── DifferentiationCard.tsx  # Step 4 result — competition level + devil's arguments
+    │   ├── VerdictCard.tsx      # Step 5 result — final verdict badge + score bars
+    │   └── ChatPanel.tsx        # AI follow-up chat after analysis
+    └── api/
+        ├── chat/
+        │   └── route.ts         # POST — AI follow-up chat (Vercel AI SDK streamText)
+        └── analyze/
+            ├── route.ts         # POST — SSE streaming endpoint (validation → stream)
+            ├── analyzer.ts      # IdeaAnalyzer class — 5-step pipeline
+            ├── prompts.ts       # Korean prompt templates (6 prompt builders)
+            └── utils.ts         # parseJsonSafe, fallback functions, cache, types
 ```
 
 ## Build & Dev Commands
 
 ```bash
-cd frontend
 npm install              # Install dependencies
 npm run dev              # Dev server (localhost:3000)
 npm run build            # Production build (TypeScript check + Next.js build)
@@ -74,7 +72,7 @@ No separate backend server needed — all API routes run as Next.js Route Handle
 
 ## Environment Variables
 
-Required in `frontend/.env.local`:
+Required in `.env.local`:
 
 | Variable | Required | Description |
 |---|---|---|
@@ -269,5 +267,5 @@ Stability is the top priority. Each external service has independent fallback:
 ## Development Notes
 
 - Single server: `npm run dev` starts Next.js on port 3000 with both frontend and API routes.
-- No `.env.local` is committed; create `frontend/.env.local` and fill in API keys.
+- No `.env.local` is committed; create `.env.local` and fill in API keys.
 - SSE streaming uses `ReadableStream` + `TextEncoder` on server and manual `ReadableStream` parsing on the client (not the browser `EventSource` API, since POST requests are needed).

@@ -71,7 +71,7 @@ app/
 
 ## Environment Variables
 
-`frontend/.env.local`에 설정 (서버 사이드 전용):
+`.env.local`에 설정 (서버 사이드 전용):
 
 | 변수 | 필수 | 설명 |
 |------|------|------|

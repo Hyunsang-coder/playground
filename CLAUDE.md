@@ -109,19 +109,25 @@ Analysis complete → ChatPanel appears
 - Streams SSE via `ReadableStream` + `TextEncoder`
 
 **`app/api/analyze/analyzer.ts`** — `IdeaAnalyzer` class:
-- `analyze(idea, mode)`: Async generator yielding SSE events for each pipeline step
-- `generateSearchQueries(idea)`: Pre-step — `generateText()` generates optimized English search queries from Korean idea
-- `searchWeb(idea, aiQueries)`: 3-phase web search — parallel Tavily calls → sparse result refinement → Claude relevance filtering. Cached (10min TTL)
+- `analyze(idea, enabledSteps)`: Async generator yielding SSE events for each pipeline step; skips disabled steps with fallback data
+- `generateSearchQueries(idea)`: Pre-step — `generateText()` generates optimized English search queries (only runs if step 1 or 2 enabled)
+- `searchWeb(idea, aiQueries)`: 4-phase web search — parallel Tavily calls → sparse result refinement → Claude relevance filtering → deterministic reranking. Cached (10min TTL)
 - `doWebSearchParallel(query1, query2, depth)`: Parallel Tavily search with dedup via `Promise.all`
 - `refineSearchQueries(idea, currentResults)`: `generateText()` generates refined queries when initial results are sparse (<3)
 - `filterRelevant(idea, competitors)`: `generateText()` filters out non-competitor results
+- `rerankCompetitors(idea, competitors)`: Deterministic relevance scoring — boosts product/service signals, demotes blog/news/SNS noise
 - `searchGithub(idea, aiQuery)`: GitHub Search API, sorted by stars descending, returns up to 10 repos. Cached (10min TTL)
+- `checkDataAndLibraries(idea)`: Pre-step 3 — 2-stage Claude pipeline: extract data sources/libraries → web evidence search → judgment. Cached (30min TTL)
 - `callClaudeStream(prompt, fallback)`: `streamText()` + `textStream` async iteration, yields progress every ~80 chars
-- `streamFeasibility/Differentiation/Verdict()`: Step-specific streaming wrappers
+- `streamFeasibility(idea, dataAvailability)`: Step 3 — no longer takes competitor/github data; focuses on data availability
+- `streamDifferentiation(idea, competitors, githubResults)`: Step 4 wrapper
+- `streamVerdict(idea, context)`: Step 5 — takes optional context per enabled step; skips unavailable data
 
-**`app/api/analyze/prompts.ts`** — Prompt builders (6 functions):
+**`app/api/analyze/prompts.ts`** — Prompt builders (8 functions):
 - `buildSearchQueriesPrompt`, `buildRefineSearchQueriesPrompt`, `buildFilterRelevantPrompt`
-- `buildFeasibilityPrompt`, `buildDifferentiationPrompt`, `buildVerdictPrompt`
+- `buildDataExtractionPrompt`, `buildDataJudgmentPrompt` — data availability 2-stage pipeline
+- `buildFeasibilityPrompt(idea, dataAvailability?)` — no longer receives competitor/github data
+- `buildDifferentiationPrompt`, `buildVerdictPrompt(idea, context)` — verdict accepts partial context (only enabled steps)
 
 **`app/api/analyze/utils.ts`** — Utilities:
 - `parseJsonSafe(text, fallback)`: 3-stage JSON parser (direct → code block → `{...}` extraction)
@@ -139,7 +145,7 @@ Analysis complete → ChatPanel appears
 - `steps: AnalysisStep[]` — accumulated step data
 - `isAnalyzing: boolean` — loading state
 - `error: string | null` — error message
-- `analyze(idea, mode)` — triggers SSE streaming
+- `analyze(idea, enabledSteps)` — triggers SSE streaming
 - `reset()` — clears all state for a new analysis
 
 **SSE Parsing** (`useAnalysis.ts`): Manual `ReadableStream` parsing (not EventSource API):
@@ -161,15 +167,17 @@ Analysis complete → ChatPanel appears
 ```
 Page
 ├── Header
-├── IdeaInput (shown when no results)
-│   └── Mode selector (hackathon / sideproject)
-└── StepCard[] (shown when results exist)
+├── IdeaInput (shown when no steps started)
+│   └── Step selector (1-5 toggles, all-or-none shortcut)
+│       └── Validation: step 5 cannot be selected alone
+└── StepCard[] (shown when analyzing or results exist)
+    ├── Loading skeleton (while steps.length === 0 and isAnalyzing)
     ├── CompetitorList    (step 1)
     ├── GitHubList        (step 2)
     ├── FeasibilityCard   (step 3)
     ├── DifferentiationCard (step 4)
     ├── VerdictCard       (step 5)
-    └── ChatPanel         (after all steps done)
+    └── ChatPanel         (after all enabled steps done)
 ```
 
 ### TypeScript Types (`app/types.ts`)
@@ -177,8 +185,9 @@ Page
 All API response shapes are typed:
 - `WebSearchResult` — `{ competitors: Competitor[], raw_count, summary }`
 - `GitHubSearchResult` — `{ repos: GitHubRepo[], total_count, summary }`
-- `FeasibilityResult` — `{ overall_feasibility, score, vibe_coding_difficulty, bottlenecks, tech_requirements, key_risks, time_estimate, summary }`
-- `DifferentiationResult` — `{ competition_level, competition_score, existing_solutions, unique_angles, devil_arguments (string), summary }`
+- `FeasibilityResult` — `{ overall_feasibility, score, vibe_coding_difficulty, bottlenecks, tech_requirements, key_risks, time_estimate, summary, data_availability? }`
+- `DifferentiationResult` — `{ competition_level, competition_score, existing_solutions, unique_angles, summary }`
+- `DataAvailabilityResult` — `{ data_sources: [{name, has_official_api, crawlable, blocking, evidence_url?, note}], libraries: [{name, available_on_npm, package_name?, note}], has_blocking_issues }`
 - `VerdictResult` — `{ verdict, confidence, overall_score, scores: VerdictScores, one_liner, recommendation, alternative_ideas }`
 - `AnalysisStep` — `{ step, title, description, status: "pending"|"loading"|"done", result?, progressText? }`
 
@@ -188,8 +197,10 @@ All API response shapes are typed:
 
 Request body:
 ```json
-{ "idea": "string", "mode": "hackathon" | "sideproject" }
+{ "idea": "string", "enabledSteps": [1, 2, 3, 4, 5] }
 ```
+
+Validation: step 5 alone is rejected with 400. `enabledSteps` defaults to all 5.
 
 SSE stream events (format: `data: {json}\n\n`):
 - `step_start`: `{ "step": 1-5, "title": "string", "description": "string" }`
@@ -205,10 +216,6 @@ Request body:
 ```
 
 Response: Vercel AI SDK text stream.
-
-Mode context mapping:
-- `hackathon` → 5시간 이내, 1인 개발자, 바이브코딩 환경
-- `sideproject` → 주말 개발, 1~2인, 배포까지 목표
 
 ### Verdict System
 
@@ -263,6 +270,14 @@ Stability is the top priority. Each external service has independent fallback:
    - Verdict averages feasibility and differentiation scores: ≥70 → GO, ≥40 → PIVOT, <40 → KILL
 4. **Missing API keys**: Detected at call time; returns fallback data without making requests
 5. **Total failure**: Error message displayed in UI via red error banner
+
+## Deployment
+
+- **Platform**: Vercel (project name: `valid8`, org: `hyunsang-coders-projects`)
+- **Production URL**: https://frontend-gules-six-15.vercel.app
+- **Auto deploy**: Vercel GitHub integration on `main` branch push
+- **Root Directory**: must be empty (repo root) — setting it to a subdirectory breaks auto deploy
+- **Manual deploy**: `npx vercel --prod`
 
 ## Development Notes
 

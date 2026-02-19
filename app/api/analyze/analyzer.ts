@@ -38,14 +38,54 @@ type ClaudeStreamEvent =
 type SearchEvidence = { urls: string[]; snippets: string[] };
 
 export class IdeaAnalyzer {
+  private readonly dataAvailabilityCacheTtlMs = 1_800_000; // 30 minutes
+  private readonly maxLocalCacheSize = 100;
+
   private anthropicApiKey: string;
   private tavilyApiKey: string;
   private githubToken: string;
+  private dataAvailabilityCache = new Map<string, { timestamp: number; result: DataAvailabilityResult }>();
 
   constructor(anthropicApiKey: string, tavilyApiKey: string, githubToken: string = "") {
     this.anthropicApiKey = anthropicApiKey;
     this.tavilyApiKey = tavilyApiKey;
     this.githubToken = githubToken;
+  }
+
+  private normalizeQuery(query: string): string {
+    return query.toLowerCase().replace(/\s+/g, " ").trim();
+  }
+
+  private buildCacheKey(prefix: string, ...parts: string[]): string {
+    return `${prefix}:${parts.map((part) => this.normalizeQuery(part)).join("|")}`;
+  }
+
+  private getDataAvailabilityCache(key: string): DataAvailabilityResult | null {
+    const cached = this.dataAvailabilityCache.get(key);
+    if (!cached) return null;
+
+    if (Date.now() - cached.timestamp < this.dataAvailabilityCacheTtlMs) {
+      return cached.result;
+    }
+
+    this.dataAvailabilityCache.delete(key);
+    return null;
+  }
+
+  private setDataAvailabilityCache(key: string, result: DataAvailabilityResult): void {
+    if (this.dataAvailabilityCache.size >= this.maxLocalCacheSize) {
+      // Drop expired first
+      for (const [cacheKey, entry] of this.dataAvailabilityCache) {
+        if (Date.now() - entry.timestamp >= this.dataAvailabilityCacheTtlMs) {
+          this.dataAvailabilityCache.delete(cacheKey);
+        }
+      }
+    }
+    if (this.dataAvailabilityCache.size >= this.maxLocalCacheSize) {
+      const oldestKey = this.dataAvailabilityCache.keys().next().value;
+      if (oldestKey !== undefined) this.dataAvailabilityCache.delete(oldestKey);
+    }
+    this.dataAvailabilityCache.set(key, { timestamp: Date.now(), result });
   }
 
   async *analyze(
@@ -225,8 +265,10 @@ export class IdeaAnalyzer {
 
     const query1 = aiQueries[0] || `${idea} tool service app`;
     const query2 = aiQueries[1] || `${idea} alternative competitor similar`;
-
-    const cacheKey = `web:${query1}|${query2}`;
+    const cacheKey = this.buildCacheKey(
+      "web",
+      ...[query1, query2].map((q) => this.normalizeQuery(q)).sort()
+    );
     const cached = cacheGet<WebSearchResult>(cacheKey);
     if (cached) return cached;
 
@@ -255,6 +297,8 @@ export class IdeaAnalyzer {
       if (competitors.length > 0 && this.anthropicApiKey) {
         competitors = await this.filterRelevant(idea, competitors);
       }
+      // Phase 4: Deterministic reranking to reduce noisy results
+      competitors = this.rerankCompetitors(idea, competitors);
 
       const result: WebSearchResult = {
         competitors: competitors.slice(0, 10),
@@ -364,12 +408,104 @@ export class IdeaAnalyzer {
     }
   }
 
+  private rerankCompetitors(idea: string, competitors: Competitor[]): Competitor[] {
+    if (competitors.length <= 1) return competitors;
+
+    const ideaTokens = this.normalizeQuery(idea)
+      .split(" ")
+      .filter((token) => token.length >= 3)
+      .slice(0, 8);
+
+    const positivePatterns = [
+      "app",
+      "tool",
+      "software",
+      "platform",
+      "product",
+      "service",
+      "saas",
+      "pricing",
+      "alternative",
+      "competitor",
+    ];
+    const noisyPatterns = [
+      "blog",
+      "tutorial",
+      "guide",
+      "how to",
+      "news",
+      "press release",
+      "reddit",
+      "quora",
+      "youtube",
+      "linkedin",
+      "tistory",
+      "velog",
+    ];
+    const trustedDomainPatterns = [
+      "github.com",
+      "producthunt.com",
+      "g2.com",
+      "capterra.com",
+      "crunchbase.com",
+    ];
+    const noisyDomainPatterns = [
+      "medium.com",
+      "dev.to",
+      "blog.",
+      "news.",
+      "youtube.com",
+    ];
+
+    const scored = competitors.map((competitor, index) => {
+      const text = this.normalizeQuery(`${competitor.title} ${competitor.snippet}`);
+      const domain = this.extractDomain(competitor.url);
+      let score = 0;
+
+      for (const token of ideaTokens) {
+        if (text.includes(token)) score += 3;
+      }
+      for (const keyword of positivePatterns) {
+        if (text.includes(keyword)) score += 1;
+      }
+      for (const keyword of noisyPatterns) {
+        if (text.includes(keyword)) score -= 2;
+      }
+      for (const pattern of trustedDomainPatterns) {
+        if (domain.includes(pattern)) score += 3;
+      }
+      for (const pattern of noisyDomainPatterns) {
+        if (domain.includes(pattern)) score -= 2;
+      }
+
+      return { competitor, index, score };
+    });
+
+    // Keep deterministic order for ties to reduce UI flicker between runs.
+    return scored
+      .sort((a, b) => (b.score - a.score) || (a.index - b.index))
+      .map((item) => item.competitor);
+  }
+
+  private extractDomain(rawUrl: string): string {
+    try {
+      return new URL(rawUrl).hostname.replace(/^www\./, "").toLowerCase();
+    } catch {
+      return "";
+    }
+  }
+
   // --- Step 2: GitHub search ---
 
   private async searchGithub(idea: string, aiQuery: string): Promise<GitHubSearchResult> {
-    const query = encodeURIComponent(aiQuery || idea);
+    const baseQuery = (aiQuery || idea).trim().replace(/\s+/g, " ");
+    const twoYearsAgo = new Date();
+    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+    const pushedAfter = twoYearsAgo.toISOString().slice(0, 10);
+    const githubQuery = `${baseQuery} stars:>=50 pushed:>=${pushedAfter} archived:false`;
+    const encodedQuery = encodeURIComponent(githubQuery);
 
-    const cached = cacheGet<GitHubSearchResult>(`github:${query}`);
+    const cached = cacheGet<GitHubSearchResult>(this.buildCacheKey("github", githubQuery));
     if (cached) return cached;
 
     try {
@@ -379,13 +515,10 @@ export class IdeaAnalyzer {
       }
 
       const resp = await fetch(
-        `https://api.github.com/search/repositories?q=${query}&sort=stars&order=desc&per_page=10`,
+        `https://api.github.com/search/repositories?q=${encodedQuery}&sort=stars&order=desc&per_page=10`,
         { headers, signal: AbortSignal.timeout(15000) }
       );
       const data = await resp.json();
-
-      const twoYearsAgo = new Date();
-      twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
 
       const allRepos = (data.items || []).map((item: Record<string, unknown>) => ({
         name: (item.full_name as string) || "",
@@ -407,7 +540,7 @@ export class IdeaAnalyzer {
         summary: `유의미한 GitHub 저장소 ${repos.length}개를 선별했습니다 (전체 검색 모수 ${data.total_count || 0}개).`,
       };
 
-      cacheSet(`github:${query}`, result);
+      cacheSet(this.buildCacheKey("github", githubQuery), result);
       return result;
     } catch (e) {
       return { repos: [], total_count: 0, summary: `GitHub 검색 중 오류: ${e instanceof Error ? e.message : String(e)}` };
@@ -469,6 +602,9 @@ export class IdeaAnalyzer {
     if (!this.anthropicApiKey) {
       return fallbackDataAvailability();
     }
+    const cacheKey = this.buildCacheKey("data-availability", idea);
+    const cached = this.getDataAvailabilityCache(cacheKey);
+    if (cached) return cached;
 
     try {
       const extractionPrompt = buildDataExtractionPrompt(idea);
@@ -494,7 +630,9 @@ export class IdeaAnalyzer {
       ).slice(0, 3);
 
       if (dataSources.length === 0 && libraries.length === 0) {
-        return fallbackDataAvailability();
+        const fallback = fallbackDataAvailability();
+        this.setDataAvailabilityCache(cacheKey, fallback);
+        return fallback;
       }
 
       const queries: string[] = [];
@@ -562,14 +700,17 @@ export class IdeaAnalyzer {
         : [];
 
       const hasBlockingIssues = dataSourceResult.some((source) => source.blocking) || Boolean(parsed.has_blocking_issues);
-
-      return {
+      const result: DataAvailabilityResult = {
         data_sources: dataSourceResult,
         libraries: libraryResult,
         has_blocking_issues: hasBlockingIssues,
       };
+      this.setDataAvailabilityCache(cacheKey, result);
+      return result;
     } catch {
-      return fallbackDataAvailability();
+      const fallback = fallbackDataAvailability();
+      this.setDataAvailabilityCache(cacheKey, fallback);
+      return fallback;
     }
   }
 

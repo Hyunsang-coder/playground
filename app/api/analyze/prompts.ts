@@ -62,6 +62,7 @@ export function buildFilterRelevantPrompt(idea: string, competitors: { title: st
 
 아래 검색 결과에서 실제 경쟁 제품/서비스/도구인 것만 골라주세요.
 뉴스 기사, 블로그 포스트, 튜토리얼, 문서 등은 제외하세요.
+반드시 관련도 높은 순서대로 인덱스를 정렬하세요.
 
 ${itemsText}
 

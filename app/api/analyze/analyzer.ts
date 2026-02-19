@@ -25,6 +25,7 @@ import {
   buildRefineSearchQueriesPrompt,
   buildFilterRelevantPrompt,
   buildDataExtractionPrompt,
+  buildDataJudgmentPrompt,
   buildFeasibilityPrompt,
   buildDifferentiationPrompt,
   buildVerdictPrompt,
@@ -817,6 +818,35 @@ export class IdeaAnalyzer {
     };
   }
 
+  private async getClaudeDataJudgment(
+    dataSources: string[],
+    libraries: string[],
+    evidenceMap: Map<string, SearchEvidence>
+  ): Promise<DataAvailabilityResult | null> {
+    if (!this.anthropicApiKey || dataSources.length === 0) return null;
+
+    try {
+      const evidenceRecord: Record<string, { urls: string[]; snippets: string[] }> = {};
+      for (const [query, ev] of evidenceMap) {
+        evidenceRecord[query] = { urls: ev.urls, snippets: ev.snippets };
+      }
+
+      const prompt = buildDataJudgmentPrompt(dataSources, libraries, evidenceRecord);
+      const { text } = await generateText({
+        model: anthropic("claude-sonnet-4-6"),
+        maxOutputTokens: 1024,
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      const parsed = parseJsonSafe<Partial<DataAvailabilityResult>>(text.trim(), {});
+      if (!parsed || !Array.isArray(parsed.data_sources)) return null;
+
+      return parsed as DataAvailabilityResult;
+    } catch {
+      return null;
+    }
+  }
+
   private async checkDataAndLibraries(idea: string): Promise<DataAvailabilityResult> {
     if (!this.anthropicApiKey) {
       return fallbackDataAvailability();
@@ -869,34 +899,59 @@ export class IdeaAnalyzer {
       const uniqueQueries = Array.from(new Set(sourceQueries));
       const evidenceMap = await this.doDataAvailabilitySearch(uniqueQueries, 9);
 
-      const dataSourceResult = await Promise.all(
-        dataSources.map(async (source) => {
-          const evidence = this.mergeEvidenceByQueries(
-            evidenceMap,
-            sourceQueriesByName.get(source) || []
-          );
-          const robots = await this.checkRobotsPolicy(evidence.urls);
-          const judged = evaluateDataSourceWithRules({
-            urls: evidence.urls,
-            snippets: evidence.snippets,
-            robotsDisallowAll: robots.disallowAll,
-            robotsCheckedDomain: robots.domain,
-          });
+      // Dual validation: rules + Claude judgment in parallel
+      const [ruleBasedDataSources, claudeJudgment, libraryResult] = await Promise.all([
+        Promise.all(
+          dataSources.map(async (source) => {
+            const evidence = this.mergeEvidenceByQueries(
+              evidenceMap,
+              sourceQueriesByName.get(source) || []
+            );
+            const robots = await this.checkRobotsPolicy(evidence.urls);
+            const judged = evaluateDataSourceWithRules({
+              urls: evidence.urls,
+              snippets: evidence.snippets,
+              robotsDisallowAll: robots.disallowAll,
+              robotsCheckedDomain: robots.domain,
+            });
 
-          return {
-            name: source,
-            has_official_api: judged.has_official_api,
-            crawlable: judged.crawlable,
-            evidence_url: judged.evidence_url,
-            blocking: judged.blocking,
-            note: judged.note,
-          };
-        })
-      );
+            return {
+              name: source,
+              has_official_api: judged.has_official_api,
+              crawlable: judged.crawlable,
+              evidence_url: judged.evidence_url,
+              blocking: judged.blocking,
+              note: judged.note,
+            };
+          })
+        ),
+        this.getClaudeDataJudgment(dataSources, libraries, evidenceMap),
+        Promise.all(libraries.map((library) => this.validateLibraryOnNpm(library))),
+      ]);
 
-      const libraryResult = await Promise.all(
-        libraries.map((library) => this.validateLibraryOnNpm(library))
-      );
+      // Merge: Claude judgment primary, rules as fallback
+      const dataSourceResult = dataSources.map((source, i) => {
+        const ruleResult = ruleBasedDataSources[i];
+        const claudeSource = claudeJudgment?.data_sources?.find(
+          (s) => s.name.toLowerCase() === source.toLowerCase()
+        );
+
+        if (!claudeSource) return ruleResult;
+
+        const agrees = claudeSource.blocking === ruleResult.blocking;
+        const note = agrees
+          ? claudeSource.note
+          : `${claudeSource.note} (규칙 판정: ${ruleResult.blocking ? "블로킹" : "통과"} → AI 판정 우선)`;
+
+        return {
+          name: source,
+          has_official_api: Boolean(claudeSource.has_official_api),
+          crawlable: Boolean(claudeSource.crawlable),
+          evidence_url: claudeSource.evidence_url || ruleResult.evidence_url,
+          blocking: Boolean(claudeSource.blocking),
+          note,
+        };
+      });
 
       const hasBlockingIssues = dataSourceResult.some((source) => source.blocking);
       const result: DataAvailabilityResult = {

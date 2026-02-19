@@ -35,8 +35,9 @@ export interface TechRequirement {
 export interface FeasibilityResult {
   overall_feasibility: "possible" | "partial" | "difficult";
   score: number;
-  vibe_coding_difficulty: "easy" | "medium" | "hard";
-  bottlenecks: string[];
+  vibe_coding_difficulty?: "easy" | "medium" | "hard";
+  bottlenecks: string[] | Bottleneck[];
+  data_availability?: DataAvailabilityResult;
   tech_requirements: TechRequirement[];
   key_risks: string[];
   time_estimate: string;
@@ -83,4 +84,44 @@ export interface AnalysisStep {
   status: StepStatus;
   result?: unknown;
   progressText?: string;
+}
+
+// --- Data Availability (Step 3 확장) ---
+
+export interface DataSource {
+  name: string;
+  has_official_api: boolean;
+  crawlable: boolean;
+  evidence_url?: string;
+  blocking: boolean;
+  note: string;
+}
+
+export interface LibraryCheck {
+  name: string;
+  available_on_npm: boolean;
+  package_name?: string;
+  note: string;
+}
+
+export interface DataAvailabilityResult {
+  data_sources: DataSource[];
+  libraries: LibraryCheck[];
+  has_blocking_issues: boolean;
+}
+
+export type BottleneckType =
+  | "api_unavailable"
+  | "auth_complexity"
+  | "data_structure_unknown"
+  | "realtime_required"
+  | "no_library"
+  | "complex_algorithm"
+  | "binary_processing";
+
+export interface Bottleneck {
+  type: BottleneckType;
+  description: string;
+  severity: "high" | "medium";
+  suggestion: string;
 }

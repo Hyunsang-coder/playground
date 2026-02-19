@@ -3,14 +3,14 @@ import { IdeaAnalyzer } from "./analyzer";
 
 export async function POST(request: NextRequest) {
   // 1. Parse and validate request body
-  let body: { idea?: string; mode?: string };
+  let body: { idea?: string; mode?: string; enabledSteps?: number[] };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { idea, mode } = body;
+  const { idea, mode, enabledSteps = [1, 2, 3, 4, 5] } = body;
 
   if (!idea || typeof idea !== "string" || idea.trim().length === 0) {
     return NextResponse.json({ error: "idea is required" }, { status: 400 });
@@ -22,6 +22,11 @@ export async function POST(request: NextRequest) {
   if (!mode || !validModes.includes(mode)) {
     return NextResponse.json({ error: `mode must be one of: ${validModes.join(", ")}` }, { status: 400 });
   }
+  const validSteps = [1, 2, 3, 4, 5];
+  const sanitizedSteps = Array.isArray(enabledSteps)
+    ? enabledSteps.filter((s): s is number => validSteps.includes(s))
+    : validSteps;
+  const finalSteps = sanitizedSteps.length > 0 ? sanitizedSteps : validSteps;
 
   // 2. Create analyzer with env-based API keys
   const analyzer = new IdeaAnalyzer(
@@ -35,7 +40,7 @@ export async function POST(request: NextRequest) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        for await (const event of analyzer.analyze(idea.trim(), mode)) {
+        for await (const event of analyzer.analyze(idea.trim(), mode, finalSteps)) {
           const line = `data: ${JSON.stringify(event.data)}\n\n`;
           controller.enqueue(encoder.encode(line));
         }

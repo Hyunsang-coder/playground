@@ -13,26 +13,28 @@ const MODE_LABELS: Record<string, { label: string; icon: typeof Zap }> = {
   sideproject: { label: "사이드 프로젝트", icon: Coffee },
 };
 
-const TOTAL_STEPS = 5;
-
 export default function Page() {
   const { steps, isAnalyzing, error, analyze, reset } = useAnalysis();
   const [currentIdea, setCurrentIdea] = useState("");
   const [currentMode, setCurrentMode] = useState("");
+  const [enabledSteps, setEnabledSteps] = useState<number[]>([1, 2, 3, 4, 5]);
 
   const hasResults = steps.length > 0;
   const completedSteps = steps.filter((s) => s.status === "done").length;
-  const progress = (completedSteps / TOTAL_STEPS) * 100;
+  const progress = enabledSteps.length > 0 ? (completedSteps / enabledSteps.length) * 100 : 0;
+  const allDone = completedSteps === enabledSteps.length && enabledSteps.length > 0;
 
-  const handleAnalyze = (idea: string, mode: string) => {
+  const handleAnalyze = (idea: string, mode: string, stepsToRun: number[]) => {
+    setEnabledSteps(stepsToRun);
     setCurrentIdea(idea);
     setCurrentMode(mode);
-    analyze(idea, mode);
+    analyze(idea, mode, stepsToRun);
   };
 
   const handleReset = () => {
     setCurrentIdea("");
     setCurrentMode("");
+    setEnabledSteps([1, 2, 3, 4, 5]);
     reset();
   };
 
@@ -52,7 +54,7 @@ export default function Page() {
             <p className="text-rose-600 font-medium">{error}</p>
             {currentIdea && (
               <button
-                onClick={() => handleAnalyze(currentIdea, currentMode || "hackathon")}
+                onClick={() => handleAnalyze(currentIdea, currentMode || "hackathon", enabledSteps)}
                 className="mt-3 inline-flex items-center gap-2 rounded-lg border border-rose-200 px-4 py-2 text-sm text-rose-600 transition-colors hover:bg-rose-100"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
@@ -93,12 +95,12 @@ export default function Page() {
               <div className="mt-4">
                 <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
                   <span>분석 진행률</span>
-                  <span className="font-mono">{completedSteps} / {TOTAL_STEPS}</span>
+                  <span className="font-mono">{completedSteps} / {enabledSteps.length}</span>
                 </div>
                 <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-700 ease-out ${
-                      completedSteps === TOTAL_STEPS ? "bg-go" : "bg-brand"
+                      allDone ? "bg-go" : "bg-brand"
                     }`}
                     style={{ width: `${progress}%` }}
                   />
@@ -113,14 +115,18 @@ export default function Page() {
                 step={step}
                 idea={currentIdea}
                 onReanalyze={(newIdea) => {
+                  const stepsToRun = enabledSteps;
                   handleReset();
-                  setTimeout(() => handleAnalyze(newIdea, currentMode || "hackathon"), 100);
+                  setTimeout(
+                    () => handleAnalyze(newIdea, currentMode || "hackathon", stepsToRun),
+                    100
+                  );
                 }}
               />
             ))}
 
-            {/* Chat panel — shown when all 5 steps are done */}
-            {completedSteps === TOTAL_STEPS && (
+            {/* Chat panel — shown when all enabled steps are done */}
+            {allDone && (
               <ChatPanel analysisResults={steps} idea={currentIdea} />
             )}
           </div>

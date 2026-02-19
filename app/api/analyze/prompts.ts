@@ -1,7 +1,13 @@
 // Prompt builder functions — ported from backend/analyzer.py
 // All prompts are in Korean, requiring pure JSON output from Claude.
 
-import type { WebSearchResult, GitHubSearchResult, FeasibilityResult, DifferentiationResult } from "./utils";
+import type {
+  WebSearchResult,
+  GitHubSearchResult,
+  FeasibilityResult,
+  DifferentiationResult,
+  DataAvailabilityResult,
+} from "./utils";
 
 function getSignalCounts(competitors: WebSearchResult, githubResults: GitHubSearchResult) {
   const webRelevantCount = competitors.raw_count || competitors.competitors.length || 0;
@@ -63,11 +69,93 @@ ${itemsText}
 {"relevant_indices": [0, 2, 5]}`;
 }
 
+export function buildDataExtractionPrompt(idea: string): string {
+  return `아이디어에서 구현에 필요한 외부 데이터 소스와 npm 라이브러리를 추출하세요.
+
+아이디어: ${idea}
+
+규칙:
+- data_sources: 외부 서비스/플랫폼 데이터 (최대 3개, 영어)
+  예) "Coupang product reviews", "Naver blog posts", "YouTube video metadata"
+- libraries: 핵심 npm 패키지 카테고리 (최대 3개, 영어)
+  예) "sentiment analysis", "PDF parsing", "image recognition"
+- React/Next.js/TypeScript 같은 범용 의존성 제외
+- 아이디어에 명확히 필요한 것만 포함
+
+반드시 순수 JSON으로만 응답:
+{"data_sources": ["string"], "libraries": ["string"]}`;
+}
+
+export function buildDataJudgmentPrompt(
+  dataSources: string[],
+  libraries: string[],
+  evidence: Record<string, { urls: string[]; snippets: string[] }>
+): string {
+  const evidenceText = Object.entries(evidence)
+    .map(([query, result]) => {
+      const urls = result.urls.length > 0 ? result.urls.map((u) => `- ${u}`).join("\n") : "- (없음)";
+      const snippets = result.snippets.length > 0
+        ? result.snippets.map((s) => `- ${s}`).join("\n")
+        : "- (없음)";
+      return `[Query] ${query}\nURLs:\n${urls}\nSnippets:\n${snippets}`;
+    })
+    .join("\n\n");
+
+  return `당신은 실무 구현 가능성 검증 전문가입니다.
+아래 Tavily 검색 증거(URL + snippet)를 바탕으로 데이터/API 및 npm 라이브러리 가용성을 판정하세요.
+
+데이터 소스 후보:
+${JSON.stringify(dataSources)}
+
+라이브러리 후보:
+${JSON.stringify(libraries)}
+
+검색 증거:
+${evidenceText}
+
+판단 규칙:
+- has_official_api: 공개된 공식 API 문서/포털이 실제로 존재하면 true
+- crawlable: 공식 API가 없어도 공개 웹사이트에서 데이터 추출 가능하면 true
+- blocking: API도 없고 크롤링도 현실적으로 어렵거나 법적/권한 제약으로 불가능하면 true
+- note: 반드시 근거 문구를 반영해 한 줄로 작성
+- evidence_url: 가장 신뢰 가능한 근거 URL 하나
+
+중요 기준:
+- "closed beta", "contact us", "requires partnership" => blocking=true
+- "free tier", "get API key", "open API" => has_official_api=true
+- 공개 웹사이트가 있고 기술적으로 수집 가능 => crawlable=true
+- npmjs.com 패키지 URL이 확인되면 available_on_npm=true, package_name 채우기
+
+반드시 순수 JSON으로만 응답하세요:
+{
+  "data_sources": [
+    {
+      "name": "string",
+      "has_official_api": true,
+      "crawlable": false,
+      "evidence_url": "https://...",
+      "blocking": false,
+      "note": "근거 요약"
+    }
+  ],
+  "libraries": [
+    {
+      "name": "string",
+      "available_on_npm": true,
+      "package_name": "string",
+      "note": "근거 요약"
+    }
+  ],
+  "has_blocking_issues": false
+}`;
+}
+
 export function buildFeasibilityPrompt(
   idea: string,
   mode: string,
   competitors: WebSearchResult,
-  githubResults: GitHubSearchResult
+  githubResults: GitHubSearchResult,
+  dataAvailability?: DataAvailabilityResult
 ): string {
   const modeContext: Record<string, string> = {
     hackathon: "5시간 이내, 1인 개발자, 바이브코딩 환경",
@@ -78,8 +166,37 @@ export function buildFeasibilityPrompt(
     githubResults
   );
 
+  let dataSection = "";
+  if (dataAvailability && (dataAvailability.data_sources.length > 0 || dataAvailability.libraries.length > 0)) {
+    const sourceLines = dataAvailability.data_sources
+      .map((s) => {
+        const status = s.has_official_api
+          ? "공식 API 확인됨"
+          : s.crawlable
+            ? "공식 API 없음, 크롤링 가능"
+            : "API 없음, 크롤링 불가 (블로커)";
+        return `- ${s.name}: ${status} — ${s.note}`;
+      })
+      .join("\n");
+
+    const libLines = dataAvailability.libraries
+      .map((l) =>
+        `- ${l.name}: ${l.available_on_npm
+          ? `npm/${l.package_name || l.name} 존재`
+          : "npm 패키지 없음, 직접 구현 필요"} — ${l.note}`
+      )
+      .join("\n");
+
+    const blockingNote = dataAvailability.has_blocking_issues
+      ? "중요: 위 조사 결과에 블로킹 이슈가 존재합니다. 반드시 overall_feasibility와 vibe_coding_difficulty에 반영하세요. has_blocking_issues=true이면 overall_feasibility는 \"difficult\", vibe_coding_difficulty는 \"hard\"여야 합니다."
+      : "블로킹 이슈 없음. 위 조사 결과를 feasibility 판단에 긍정적으로 반영하세요.";
+
+    dataSection = `\n[사전 실증 조사 결과 — 반드시 아래 사실을 기반으로 분석하세요]\n외부 데이터 소스:\n${sourceLines || "- 없음"}\nnpm 라이브러리:\n${libLines || "- 없음"}\n${blockingNote}\n`;
+  }
+
   return `당신은 바이브코딩(AI 어시스턴트와 함께 코딩하는 환경) 실현성을 냉정하게 분석하는 시니어 개발자입니다.
 
+${dataSection}
 아이디어: ${idea}
 개발 환경: ${modeContext[mode] || modeContext.hackathon}
 
@@ -95,7 +212,8 @@ GitHub 전체 검색 모수(참고): ${githubBroadCount}개
    - hard(어려움): WebSocket, 실시간 동기화, 복잡한 인증, 이진 파일 처리
 
 2. 병목 지점: AI가 틀리거나 막힐 가능성이 높은 구체적인 기능 2~3개
-   예) "OAuth 구현에서 토큰 갱신 로직", "PDF 테이블 파싱"
+   - crawlable=true인 데이터 소스는 블로커가 아닙니다.
+   - 이 경우 type은 api_unavailable, severity는 medium으로 작성하세요.
 
 3. 외부 의존성 리스크:
    - 인증 필요 여부 (시간 블랙홀 위험)
@@ -111,7 +229,14 @@ GitHub 전체 검색 모수(참고): ${githubBroadCount}개
   "overall_feasibility": "possible" | "partial" | "difficult",
   "score": 0-100,
   "vibe_coding_difficulty": "easy" | "medium" | "hard",
-  "bottlenecks": ["AI가 막힐 가능성이 높은 구체적 기능 1", "구체적 기능 2"],
+  "bottlenecks": [
+    {
+      "type": "api_unavailable|auth_complexity|data_structure_unknown|realtime_required|no_library|complex_algorithm|binary_processing",
+      "description": "구체적 기능명",
+      "severity": "high|medium",
+      "suggestion": "대안 또는 우회 방법"
+    }
+  ],
   "tech_requirements": [
     {"name": "기술/API명", "available": true/false, "difficulty": "easy|medium|hard", "note": "한줄 설명"}
   ],
@@ -187,12 +312,18 @@ export function buildVerdictPrompt(
   competitors: WebSearchResult,
   githubResults: GitHubSearchResult,
   feasibility: FeasibilityResult,
-  differentiation: DifferentiationResult
+  differentiation: DifferentiationResult,
+  dataAvailability?: DataAvailabilityResult
 ): string {
   const { webRelevantCount, githubRelevantCount, githubBroadCount } = getSignalCounts(
     competitors,
     githubResults
   );
+
+  const dataSummary = dataAvailability
+    ? `\n데이터/API 가용성:\n- has_blocking_issues: ${String(dataAvailability.has_blocking_issues)}\n- data_sources: ${JSON.stringify(dataAvailability.data_sources)}\n- libraries: ${JSON.stringify(dataAvailability.libraries)}`
+    : "";
+
   return `당신은 해커톤/사이드 프로젝트 아이디어 심판관입니다. 혼자 만드는 개발자 관점에서 모든 분석 결과를 종합하여 최종 판정을 내리세요.
 
 아이디어: ${idea}
@@ -212,6 +343,7 @@ export function buildVerdictPrompt(
 차별화:
 - 경쟁 점수: ${differentiation.competition_score ?? 50}/100
 - 차별화 포인트: ${JSON.stringify(differentiation.unique_angles || [])}
+${dataSummary}
 
 반드시 순수 JSON으로만 응답하세요:
 
@@ -234,5 +366,7 @@ export function buildVerdictPrompt(
 - overall_score 및 scores.competition 산정은 "유의미 후보 수"를 핵심 근거로 하세요.
 - 전체 검색 모수(total_count)는 과장 가능성이 있으므로 보조 근거로만 사용하세요.
 - recommendation은 1~2문장으로 핵심만 간결하게 작성하세요.
-- alternative_ideas는 각 항목을 10자 이내의 짧은 키워드/제목으로 작성하세요.`;
+- alternative_ideas는 각 항목을 10자 이내의 짧은 키워드/제목으로 작성하세요.
+- has_blocking_issues=true이면 verdict는 PIVOT 또는 KILL을 우선 고려하세요.
+- has_blocking_issues=true일 때 alternative_ideas에는 공식 API가 있는 대안을 포함하세요.`;
 }

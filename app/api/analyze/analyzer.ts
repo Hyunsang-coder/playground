@@ -8,6 +8,7 @@ import {
   fallbackFeasibility,
   fallbackDifferentiation,
   fallbackVerdict,
+  fallbackDataAvailability,
   cacheGet,
   cacheSet,
   sleep,
@@ -17,15 +18,24 @@ import {
   type GitHubSearchResult,
   type FeasibilityResult,
   type DifferentiationResult,
+  type DataAvailabilityResult,
 } from "./utils";
 import {
   buildSearchQueriesPrompt,
   buildRefineSearchQueriesPrompt,
   buildFilterRelevantPrompt,
+  buildDataExtractionPrompt,
+  buildDataJudgmentPrompt,
   buildFeasibilityPrompt,
   buildDifferentiationPrompt,
   buildVerdictPrompt,
 } from "./prompts";
+
+type ClaudeStreamEvent =
+  | { type: "progress"; text: string }
+  | { type: "result"; result: Record<string, unknown> };
+
+type SearchEvidence = { urls: string[]; snippets: string[] };
 
 export class IdeaAnalyzer {
   private anthropicApiKey: string;
@@ -38,67 +48,148 @@ export class IdeaAnalyzer {
     this.githubToken = githubToken;
   }
 
-  async *analyze(idea: string, mode: string): AsyncGenerator<SSEEvent> {
-    // Pre-step: AI generates optimized search queries
-    const searchQueries = await this.generateSearchQueries(idea);
+  async *analyze(
+    idea: string,
+    mode: string,
+    enabledSteps: number[] = [1, 2, 3, 4, 5]
+  ): AsyncGenerator<SSEEvent> {
+    const activeSteps = enabledSteps.length > 0 ? enabledSteps : [1, 2, 3, 4, 5];
+    const shouldRun = (step: number) => activeSteps.includes(step);
 
-    // Step 1: Web search for competitors
-    const webQueriesDisplay = (searchQueries.web_queries || [idea]).slice(0, 2).join(" / ");
-    yield { event: "step_start", data: { step: 1, title: "경쟁 제품 탐색", description: `AI 최적화 키워드로 검색 중: ${webQueriesDisplay}` } };
-    await sleep(300);
+    const searchQueries = shouldRun(1) || shouldRun(2)
+      ? await this.generateSearchQueries(idea)
+      : { web_queries: [idea], github_query: idea };
 
-    const competitors = await this.searchWeb(idea, searchQueries.web_queries || []);
-    yield { event: "step_result", data: { step: 1, result: competitors } };
+    let competitors: WebSearchResult = {
+      competitors: [],
+      summary: "경쟁 제품 탐색 단계가 비활성화되었습니다.",
+      raw_count: 0,
+    };
 
-    // Step 2: GitHub search for similar projects
-    const ghQueryDisplay = searchQueries.github_query || idea;
-    yield { event: "step_start", data: { step: 2, title: "GitHub 유사 프로젝트 탐색", description: `AI 최적화 키워드로 검색 중: ${ghQueryDisplay}` } };
-    await sleep(300);
+    if (shouldRun(1)) {
+      const webQueriesDisplay = (searchQueries.web_queries || [idea]).slice(0, 2).join(" / ");
+      yield {
+        event: "step_start",
+        data: {
+          step: 1,
+          title: "경쟁 제품 탐색",
+          description: `AI 최적화 키워드로 검색 중: ${webQueriesDisplay}`,
+        },
+      };
+      await sleep(300);
 
-    const githubResults = await this.searchGithub(idea, searchQueries.github_query || "");
-    yield { event: "step_result", data: { step: 2, result: githubResults } };
-
-    // Step 3: Vibe coding feasibility analysis (streaming)
-    yield { event: "step_start", data: { step: 3, title: "바이브코딩 실현성 분석", description: "AI가 바이브코딩 난이도와 병목 지점을 분석하고 있습니다..." } };
-    await sleep(300);
-
-    let feasibility: FeasibilityResult | null = null;
-    for await (const event of this.streamFeasibility(idea, mode, competitors, githubResults)) {
-      if (event.type === "progress") {
-        yield { event: "step_progress", data: { step: 3, text: event.text } };
-      } else {
-        feasibility = event.result as unknown as FeasibilityResult;
-      }
+      competitors = await this.searchWeb(idea, searchQueries.web_queries || []);
+      yield { event: "step_result", data: { step: 1, result: competitors } };
     }
-    yield { event: "step_result", data: { step: 3, result: feasibility } };
 
-    // Step 4: Differentiation analysis (streaming)
-    yield { event: "step_start", data: { step: 4, title: "차별화 분석", description: "기존 제품 대비 차별점을 분석하고 있습니다..." } };
-    await sleep(300);
+    let githubResults: GitHubSearchResult = {
+      repos: [],
+      total_count: 0,
+      summary: "GitHub 유사 프로젝트 탐색 단계가 비활성화되었습니다.",
+    };
 
-    let differentiation: DifferentiationResult | null = null;
-    for await (const event of this.streamDifferentiation(idea, competitors, githubResults)) {
-      if (event.type === "progress") {
-        yield { event: "step_progress", data: { step: 4, text: event.text } };
-      } else {
-        differentiation = event.result as unknown as DifferentiationResult;
-      }
+    if (shouldRun(2)) {
+      const ghQueryDisplay = searchQueries.github_query || idea;
+      yield {
+        event: "step_start",
+        data: {
+          step: 2,
+          title: "GitHub 유사 프로젝트 탐색",
+          description: `AI 최적화 키워드로 검색 중: ${ghQueryDisplay}`,
+        },
+      };
+      await sleep(300);
+
+      githubResults = await this.searchGithub(idea, searchQueries.github_query || "");
+      yield { event: "step_result", data: { step: 2, result: githubResults } };
     }
-    yield { event: "step_result", data: { step: 4, result: differentiation } };
 
-    // Step 5: Final verdict (streaming)
-    yield { event: "step_start", data: { step: 5, title: "종합 판정", description: "최종 리포트를 생성하고 있습니다..." } };
-    await sleep(300);
+    const dataAvailability: DataAvailabilityResult = shouldRun(3)
+      ? await this.checkDataAndLibraries(idea)
+      : fallbackDataAvailability();
 
-    let verdict = null;
-    for await (const event of this.streamVerdict(idea, mode, competitors, githubResults, feasibility!, differentiation!)) {
-      if (event.type === "progress") {
-        yield { event: "step_progress", data: { step: 5, text: event.text } };
-      } else {
-        verdict = event.result;
+    let feasibility: FeasibilityResult = fallbackFeasibility();
+    if (shouldRun(3)) {
+      yield {
+        event: "step_start",
+        data: {
+          step: 3,
+          title: "바이브코딩 실현성 분석",
+          description: "AI가 바이브코딩 난이도와 병목 지점을 분석하고 있습니다...",
+        },
+      };
+      await sleep(300);
+
+      for await (const event of this.streamFeasibility(
+        idea,
+        mode,
+        competitors,
+        githubResults,
+        dataAvailability
+      )) {
+        if (event.type === "progress") {
+          yield { event: "step_progress", data: { step: 3, text: event.text } };
+        } else {
+          feasibility = event.result as unknown as FeasibilityResult;
+        }
       }
+
+      yield { event: "step_result", data: { step: 3, result: feasibility } };
     }
-    yield { event: "step_result", data: { step: 5, result: verdict } };
+
+    let differentiation: DifferentiationResult = fallbackDifferentiation(competitors, githubResults);
+    if (shouldRun(4)) {
+      yield {
+        event: "step_start",
+        data: {
+          step: 4,
+          title: "차별화 분석",
+          description: "기존 제품 대비 차별점을 분석하고 있습니다...",
+        },
+      };
+      await sleep(300);
+
+      for await (const event of this.streamDifferentiation(idea, competitors, githubResults)) {
+        if (event.type === "progress") {
+          yield { event: "step_progress", data: { step: 4, text: event.text } };
+        } else {
+          differentiation = event.result as unknown as DifferentiationResult;
+        }
+      }
+
+      yield { event: "step_result", data: { step: 4, result: differentiation } };
+    }
+
+    if (shouldRun(5)) {
+      yield {
+        event: "step_start",
+        data: {
+          step: 5,
+          title: "종합 판정",
+          description: "최종 리포트를 생성하고 있습니다...",
+        },
+      };
+      await sleep(300);
+
+      let verdict = fallbackVerdict(feasibility, differentiation);
+      for await (const event of this.streamVerdict(
+        idea,
+        mode,
+        competitors,
+        githubResults,
+        feasibility,
+        differentiation,
+        dataAvailability
+      )) {
+        if (event.type === "progress") {
+          yield { event: "step_progress", data: { step: 5, text: event.text } };
+        } else {
+          verdict = event.result as unknown as typeof verdict;
+        }
+      }
+
+      yield { event: "step_result", data: { step: 5, result: verdict } };
+    }
 
     yield { event: "done", data: { message: "분석 완료" } };
   }
@@ -323,12 +414,171 @@ export class IdeaAnalyzer {
     }
   }
 
+  private async doDataAvailabilitySearch(
+    queries: string[]
+  ): Promise<Map<string, SearchEvidence>> {
+    const limitedQueries = queries.slice(0, 6);
+
+    const results = await Promise.all(
+      limitedQueries.map(async (query) => {
+        if (!this.tavilyApiKey) {
+          return [query, { urls: [], snippets: [] }] as [string, SearchEvidence];
+        }
+
+        try {
+          const resp = await fetch("https://api.tavily.com/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              api_key: this.tavilyApiKey,
+              query,
+              max_results: 3,
+              search_depth: "basic",
+              include_raw_content: true,
+            }),
+            signal: AbortSignal.timeout(20000),
+          });
+
+          if (!resp.ok) {
+            return [query, { urls: [], snippets: [] }] as [string, SearchEvidence];
+          }
+
+          const data = await resp.json() as {
+            results?: Array<{ url?: string; content?: string; raw_content?: string }>;
+          };
+
+          const topResults = (data.results || []).slice(0, 3);
+          const urls = topResults
+            .map((r) => r.url || "")
+            .filter((u): u is string => Boolean(u));
+          const snippets = topResults
+            .map((r) => (r.content || r.raw_content || "").trim().slice(0, 300))
+            .filter((s): s is string => Boolean(s));
+
+          return [query, { urls, snippets }] as [string, SearchEvidence];
+        } catch {
+          return [query, { urls: [], snippets: [] }] as [string, SearchEvidence];
+        }
+      })
+    );
+
+    return new Map(results);
+  }
+
+  private async checkDataAndLibraries(idea: string): Promise<DataAvailabilityResult> {
+    if (!this.anthropicApiKey) {
+      return fallbackDataAvailability();
+    }
+
+    try {
+      const extractionPrompt = buildDataExtractionPrompt(idea);
+      const extractionFallback = { data_sources: [], libraries: [] };
+
+      const { text: extractionText } = await generateText({
+        model: anthropic("claude-sonnet-4-6"),
+        maxOutputTokens: 512,
+        messages: [{ role: "user", content: extractionPrompt }],
+      });
+
+      const extracted = parseJsonSafe<{ data_sources?: string[]; libraries?: string[] }>(
+        extractionText.trim(),
+        extractionFallback
+      );
+
+      const dataSources = Array.from(
+        new Set((extracted.data_sources || []).filter((x): x is string => typeof x === "string").map((x) => x.trim()).filter(Boolean))
+      ).slice(0, 3);
+
+      const libraries = Array.from(
+        new Set((extracted.libraries || []).filter((x): x is string => typeof x === "string").map((x) => x.trim()).filter(Boolean))
+      ).slice(0, 3);
+
+      if (dataSources.length === 0 && libraries.length === 0) {
+        return fallbackDataAvailability();
+      }
+
+      const queries: string[] = [];
+      for (const source of dataSources) {
+        queries.push(`${source} official API documentation`);
+        queries.push(`${source} developer portal`);
+      }
+      for (const library of libraries) {
+        queries.push(`npm ${library} package`);
+      }
+
+      const limitedQueries = queries.slice(0, 6);
+      const evidenceMap = await this.doDataAvailabilitySearch(limitedQueries);
+      const evidence: Record<string, { urls: string[]; snippets: string[] }> = {};
+
+      for (const q of limitedQueries) {
+        evidence[q] = evidenceMap.get(q) || { urls: [], snippets: [] };
+      }
+
+      const judgmentPrompt = buildDataJudgmentPrompt(dataSources, libraries, evidence);
+      const { text: judgmentText } = await generateText({
+        model: anthropic("claude-sonnet-4-6"),
+        maxOutputTokens: 2048,
+        messages: [{ role: "user", content: judgmentPrompt }],
+      });
+
+      const parsed = parseJsonSafe<Partial<DataAvailabilityResult>>(
+        judgmentText.trim(),
+        fallbackDataAvailability()
+      );
+
+      const dataSourceResult = Array.isArray(parsed.data_sources)
+        ? parsed.data_sources
+          .filter((item): item is NonNullable<Partial<DataAvailabilityResult>["data_sources"]>[number] =>
+            typeof item === "object" && item !== null
+          )
+          .map((item, index) => {
+            const hasOfficialApi = Boolean(item.has_official_api);
+            const crawlable = Boolean(item.crawlable);
+            return {
+              name: typeof item.name === "string" && item.name.trim() ? item.name.trim() : dataSources[index] || "Unknown source",
+              has_official_api: hasOfficialApi,
+              crawlable,
+              evidence_url: typeof item.evidence_url === "string" ? item.evidence_url : undefined,
+              // PLAN 원칙: 공식 API 또는 크롤링 가능이면 블로커가 아니다.
+              blocking: Boolean(item.blocking) && !hasOfficialApi && !crawlable,
+              note: typeof item.note === "string" && item.note.trim() ? item.note.trim() : "근거 부족",
+            };
+          })
+        : [];
+
+      const libraryResult = Array.isArray(parsed.libraries)
+        ? parsed.libraries
+          .filter((item): item is NonNullable<Partial<DataAvailabilityResult>["libraries"]>[number] =>
+            typeof item === "object" && item !== null
+          )
+          .map((item, index) => ({
+            name: typeof item.name === "string" && item.name.trim() ? item.name.trim() : libraries[index] || "Unknown library",
+            available_on_npm: Boolean(item.available_on_npm),
+            package_name: typeof item.package_name === "string" && item.package_name.trim()
+              ? item.package_name.trim()
+              : undefined,
+            note: typeof item.note === "string" && item.note.trim() ? item.note.trim() : "근거 부족",
+          }))
+        : [];
+
+      const hasBlockingIssues = dataSourceResult.some((source) => source.blocking) || Boolean(parsed.has_blocking_issues);
+
+      return {
+        data_sources: dataSourceResult,
+        libraries: libraryResult,
+        has_blocking_issues: hasBlockingIssues,
+      };
+    } catch {
+      return fallbackDataAvailability();
+    }
+  }
+
   // --- Steps 3-5: Claude streaming ---
 
   private async *callClaudeStream(
     prompt: string,
     fallback: Record<string, unknown>
-  ): AsyncGenerator<{ type: "progress"; text: string } | { type: "result"; result: Record<string, unknown> }> {
+  ): AsyncGenerator<ClaudeStreamEvent> {
     if (!this.anthropicApiKey) {
       yield { type: "result", result: fallback };
       return;
@@ -364,18 +614,26 @@ export class IdeaAnalyzer {
     idea: string,
     mode: string,
     competitors: WebSearchResult,
-    githubResults: GitHubSearchResult
-  ) {
+    githubResults: GitHubSearchResult,
+    dataAvailability: DataAvailabilityResult
+  ): AsyncGenerator<ClaudeStreamEvent> {
     const fallback = fallbackFeasibility();
-    const prompt = buildFeasibilityPrompt(idea, mode, competitors, githubResults);
-    yield* this.callClaudeStream(prompt, fallback as unknown as Record<string, unknown>);
+    const prompt = buildFeasibilityPrompt(idea, mode, competitors, githubResults, dataAvailability);
+
+    for await (const event of this.callClaudeStream(prompt, fallback as unknown as Record<string, unknown>)) {
+      if (event.type === "result") {
+        yield { type: "result", result: { ...event.result, data_availability: dataAvailability } };
+      } else {
+        yield event;
+      }
+    }
   }
 
   private async *streamDifferentiation(
     idea: string,
     competitors: WebSearchResult,
     githubResults: GitHubSearchResult
-  ) {
+  ): AsyncGenerator<ClaudeStreamEvent> {
     const fallback = fallbackDifferentiation(competitors, githubResults);
     const prompt = buildDifferentiationPrompt(idea, competitors, githubResults);
     yield* this.callClaudeStream(prompt, fallback as unknown as Record<string, unknown>);
@@ -387,10 +645,19 @@ export class IdeaAnalyzer {
     competitors: WebSearchResult,
     githubResults: GitHubSearchResult,
     feasibility: FeasibilityResult,
-    differentiation: DifferentiationResult
-  ) {
+    differentiation: DifferentiationResult,
+    dataAvailability: DataAvailabilityResult
+  ): AsyncGenerator<ClaudeStreamEvent> {
     const fallback = fallbackVerdict(feasibility, differentiation);
-    const prompt = buildVerdictPrompt(idea, mode, competitors, githubResults, feasibility, differentiation);
+    const prompt = buildVerdictPrompt(
+      idea,
+      mode,
+      competitors,
+      githubResults,
+      feasibility,
+      differentiation,
+      dataAvailability
+    );
     yield* this.callClaudeStream(prompt, fallback as unknown as Record<string, unknown>);
   }
 }

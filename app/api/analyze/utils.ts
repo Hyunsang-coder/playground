@@ -29,11 +29,49 @@ export interface GitHubSearchResult {
   summary: string;
 }
 
+export interface DataSource {
+  name: string;
+  has_official_api: boolean;
+  crawlable: boolean;
+  evidence_url?: string;
+  blocking: boolean;
+  note: string;
+}
+
+export interface LibraryCheck {
+  name: string;
+  available_on_npm: boolean;
+  package_name?: string;
+  note: string;
+}
+
+export interface DataAvailabilityResult {
+  data_sources: DataSource[];
+  libraries: LibraryCheck[];
+  has_blocking_issues: boolean;
+}
+
+export type BottleneckType =
+  | "api_unavailable"
+  | "auth_complexity"
+  | "data_structure_unknown"
+  | "realtime_required"
+  | "no_library"
+  | "complex_algorithm"
+  | "binary_processing";
+
+export interface Bottleneck {
+  type: BottleneckType;
+  description: string;
+  severity: "high" | "medium";
+  suggestion: string;
+}
+
 export interface FeasibilityResult {
   overall_feasibility: string;
   score: number;
   vibe_coding_difficulty?: string;
-  bottlenecks?: string[];
+  bottlenecks?: (string | Bottleneck)[];
   tech_requirements: { name: string; available: boolean; difficulty: string; note: string }[];
   key_risks: string[];
   time_estimate: string;
@@ -110,6 +148,10 @@ export function fallbackFeasibility(): FeasibilityResult {
     time_estimate: "알 수 없음",
     summary: "AI 분석을 수행하지 못했습니다. API 키를 확인하세요.",
   };
+}
+
+export function fallbackDataAvailability(): DataAvailabilityResult {
+  return { data_sources: [], libraries: [], has_blocking_issues: false };
 }
 
 export function fallbackDifferentiation(

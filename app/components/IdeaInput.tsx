@@ -1,16 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Zap, Coffee } from "lucide-react";
+import { Search, Zap, Coffee, CheckSquare, Square } from "lucide-react";
 
 interface Props {
-  onSubmit: (idea: string, mode: string) => void;
+  onSubmit: (idea: string, mode: string, enabledSteps: number[]) => void;
   isLoading: boolean;
 }
 
 const MODES = [
   { value: "hackathon", label: "해커톤", icon: Zap, desc: "5시간 이내, 1인 바이브코딩" },
   { value: "sideproject", label: "사이드", icon: Coffee, desc: "주말 개발, 배포까지" },
+];
+
+const STEPS = [
+  { step: 1, label: "경쟁 제품 탐색" },
+  { step: 2, label: "GitHub 유사 프로젝트" },
+  { step: 3, label: "바이브코딩 실현성" },
+  { step: 4, label: "차별화 분석" },
+  { step: 5, label: "종합 판정" },
 ];
 
 const EXAMPLES = [
@@ -23,11 +31,21 @@ const EXAMPLES = [
 export default function IdeaInput({ onSubmit, isLoading }: Props) {
   const [idea, setIdea] = useState("");
   const [mode, setMode] = useState("hackathon");
+  const [enabledSteps, setEnabledSteps] = useState<number[]>([1, 2, 3, 4, 5]);
+
+  const toggleStep = (step: number) => {
+    setEnabledSteps((prev) =>
+      prev.includes(step) ? prev.filter((s) => s !== step) : [...prev, step].sort((a, b) => a - b)
+    );
+  };
+
+  const allSelected = enabledSteps.length === STEPS.length;
+  const toggleAll = () => setEnabledSteps(allSelected ? [] : [1, 2, 3, 4, 5]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!idea.trim() || isLoading) return;
-    onSubmit(idea.trim(), mode);
+    if (!idea.trim() || isLoading || enabledSteps.length === 0) return;
+    onSubmit(idea.trim(), mode, enabledSteps);
   };
 
   return (
@@ -84,10 +102,51 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
         })}
       </div>
 
+      {/* Step selector */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-semibold text-slate-700">분석 단계 선택</p>
+          <button
+            type="button"
+            onClick={toggleAll}
+            className="text-xs font-medium text-brand hover:underline"
+          >
+            {allSelected ? "전체 해제" : "전체 선택"}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {STEPS.map((item) => {
+            const checked = enabledSteps.includes(item.step);
+            return (
+              <button
+                key={item.step}
+                type="button"
+                onClick={() => toggleStep(item.step)}
+                className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all ${
+                  checked
+                    ? "border-brand/40 bg-brand/5 text-brand"
+                    : "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50"
+                }`}
+              >
+                {checked ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                <span>
+                  {item.step}. {item.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {enabledSteps.length === 0 && (
+          <p className="mt-3 text-xs text-rose-600">최소 1개 이상의 단계를 선택해야 합니다.</p>
+        )}
+      </div>
+
       {/* Submit button */}
       <button
         type="submit"
-        disabled={!idea.trim() || isLoading}
+        disabled={!idea.trim() || isLoading || enabledSteps.length === 0}
         className="flex w-full items-center justify-center gap-3 rounded-2xl bg-brand px-6 sm:px-8 py-3.5 sm:py-4 text-lg sm:text-xl font-bold text-white shadow-lg shadow-brand/20 transition-all hover:bg-indigo-600 hover:shadow-xl hover:shadow-brand/25 disabled:opacity-40 disabled:shadow-none disabled:hover:bg-brand"
       >
         <Search className="h-6 w-6" />

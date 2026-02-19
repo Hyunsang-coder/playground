@@ -3,6 +3,13 @@
 
 import type { WebSearchResult, GitHubSearchResult, FeasibilityResult, DifferentiationResult } from "./utils";
 
+function getSignalCounts(competitors: WebSearchResult, githubResults: GitHubSearchResult) {
+  const webRelevantCount = competitors.raw_count || competitors.competitors.length || 0;
+  const githubRelevantCount = githubResults.repos.length || 0;
+  const githubBroadCount = githubResults.total_count || 0;
+  return { webRelevantCount, githubRelevantCount, githubBroadCount };
+}
+
 export function buildSearchQueriesPrompt(idea: string): string {
   return `사용자의 아이디어를 기반으로 경쟁 제품과 유사 프로젝트를 찾기 위한 최적의 검색 키워드를 생성하세요.
 
@@ -66,14 +73,19 @@ export function buildFeasibilityPrompt(
     hackathon: "5시간 이내, 1인 개발자, 바이브코딩 환경",
     sideproject: "주말 개발, 1~2인, 배포까지 목표",
   };
+  const { webRelevantCount, githubRelevantCount, githubBroadCount } = getSignalCounts(
+    competitors,
+    githubResults
+  );
 
   return `당신은 바이브코딩(AI 어시스턴트와 함께 코딩하는 환경) 실현성을 냉정하게 분석하는 시니어 개발자입니다.
 
 아이디어: ${idea}
 개발 환경: ${modeContext[mode] || modeContext.hackathon}
 
-기존 경쟁 제품 수: ${competitors.raw_count || 0}개
-GitHub 유사 프로젝트: ${githubResults.total_count || 0}개
+웹 유의미 경쟁 후보 수(필터 통과): ${webRelevantCount}개
+GitHub 유의미 유사 저장소 수(필터 통과): ${githubRelevantCount}개
+GitHub 전체 검색 모수(참고): ${githubBroadCount}개
 
 다음을 분석해주세요:
 
@@ -91,6 +103,7 @@ GitHub 유사 프로젝트: ${githubResults.total_count || 0}개
    - 유료 API 의존 여부
 
 4. 해커톤/사이드 프로젝트 맥락에서의 실현 가능성 총평
+5. 반드시 "유의미 후보 수(웹/GitHub 필터 통과)"를 핵심 근거로 사용하고, "전체 검색 모수"는 보조 참고치로만 반영
 
 반드시 순수 JSON으로만 응답하세요:
 
@@ -113,6 +126,10 @@ export function buildDifferentiationPrompt(
   competitors: WebSearchResult,
   githubResults: GitHubSearchResult
 ): string {
+  const { webRelevantCount, githubRelevantCount, githubBroadCount } = getSignalCounts(
+    competitors,
+    githubResults
+  );
   const competitorList =
     competitors.competitors
       .slice(0, 5)
@@ -136,12 +153,20 @@ export function buildDifferentiationPrompt(
 정중하지만 뼈 때리는 말투로, 불필요한 수식어 없이 핵심 약점을 서술하세요.
 
 아이디어: ${idea}
+정량 신호:
+- 웹 유의미 경쟁 후보: ${webRelevantCount}개
+- GitHub 유의미 유사 저장소: ${githubRelevantCount}개
+- GitHub 전체 검색 모수(참고): ${githubBroadCount}개
 
 경쟁 제품:
 ${competitorList}
 
 GitHub 유사 프로젝트:
 ${githubList}
+
+중요:
+- "유의미 후보 수"를 1차 근거로 사용하세요.
+- total_count 같은 전체 모수는 과장될 수 있으므로 보조 지표로만 사용하세요.
 
 반드시 순수 JSON으로만 응답하세요:
 
@@ -164,14 +189,19 @@ export function buildVerdictPrompt(
   feasibility: FeasibilityResult,
   differentiation: DifferentiationResult
 ): string {
+  const { webRelevantCount, githubRelevantCount, githubBroadCount } = getSignalCounts(
+    competitors,
+    githubResults
+  );
   return `당신은 해커톤/사이드 프로젝트 아이디어 심판관입니다. 혼자 만드는 개발자 관점에서 모든 분석 결과를 종합하여 최종 판정을 내리세요.
 
 아이디어: ${idea}
 모드: ${mode}
 
 경쟁 현황:
-- 웹 검색 결과: ${competitors.raw_count || 0}개
-- GitHub 유사 프로젝트: ${githubResults.total_count || 0}개
+- 웹 유의미 경쟁 후보: ${webRelevantCount}개
+- GitHub 유의미 유사 저장소: ${githubRelevantCount}개
+- GitHub 전체 검색 모수(참고): ${githubBroadCount}개
 - 경쟁 수준: ${differentiation.competition_level || "unknown"}
 
 기술 실현성:
@@ -201,6 +231,8 @@ export function buildVerdictPrompt(
 }
 
 주의:
+- overall_score 및 scores.competition 산정은 "유의미 후보 수"를 핵심 근거로 하세요.
+- 전체 검색 모수(total_count)는 과장 가능성이 있으므로 보조 근거로만 사용하세요.
 - recommendation은 1~2문장으로 핵심만 간결하게 작성하세요.
 - alternative_ideas는 각 항목을 10자 이내의 짧은 키워드/제목으로 작성하세요.`;
 }

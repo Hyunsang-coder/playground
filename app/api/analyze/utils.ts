@@ -116,14 +116,16 @@ export function fallbackDifferentiation(
   competitors: WebSearchResult,
   githubResults: GitHubSearchResult
 ): DifferentiationResult {
-  const compCount = (competitors.raw_count || 0) + (githubResults.total_count || 0);
-  const level = compCount > 20 ? "red_ocean" : compCount > 5 ? "moderate" : "blue_ocean";
+  const webSignalCount = competitors.raw_count || competitors.competitors.length || 0;
+  const githubSignalCount = githubResults.repos.length || 0;
+  const compCount = webSignalCount + githubSignalCount;
+  const level = compCount > 12 ? "red_ocean" : compCount > 4 ? "moderate" : "blue_ocean";
   return {
     competition_level: level,
-    competition_score: Math.max(0, 100 - compCount * 5),
+    competition_score: Math.max(0, 100 - compCount * 7),
     existing_solutions: [],
     unique_angles: [],
-    summary: `경쟁 제품 ${compCount}개 기반 자동 판정`,
+    summary: `유의미 경쟁 신호 ${compCount}개(웹 ${webSignalCount}, GitHub ${githubSignalCount}) 기반 자동 판정`,
   };
 }
 

@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useChat } from "@ai-sdk/react";
-import { TextStreamChatTransport } from "ai";
+import { DefaultChatTransport } from "ai";
 import { Send, MessageCircle, Sparkles } from "lucide-react";
 import type { AnalysisStep } from "../types";
 
@@ -32,7 +32,7 @@ export default function ChatPanel({ analysisResults, idea }: Props) {
 
   const transport = useMemo(
     () =>
-      new TextStreamChatTransport({
+      new DefaultChatTransport({
         api: "/api/chat",
         body: { analysisResults: resultsContext },
       }),

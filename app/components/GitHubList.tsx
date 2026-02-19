@@ -13,7 +13,7 @@ export default function GitHubList({ data }: Props) {
       <div className="flex items-center justify-between">
         <span className="text-sm text-slate-500">{data.summary}</span>
         <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-mono text-slate-600">
-          총 {data.total_count.toLocaleString()}개
+          유의미 {data.repos.length}개
         </span>
       </div>
 

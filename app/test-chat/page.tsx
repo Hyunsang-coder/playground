@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useChat } from "@ai-sdk/react";
-import { TextStreamChatTransport } from "ai";
+import { DefaultChatTransport } from "ai";
 
 const MOCK_RESULTS = [
   { step: 1, title: "경쟁 제품 탐색", result: { competitors: [], raw_count: 0, summary: "테스트" } },
@@ -20,7 +20,7 @@ export default function TestChatPage() {
 
   const transport = useMemo(
     () =>
-      new TextStreamChatTransport({
+      new DefaultChatTransport({
         api: "/api/chat",
         body: { analysisResults: MOCK_RESULTS },
       }),

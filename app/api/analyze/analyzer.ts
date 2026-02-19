@@ -313,7 +313,7 @@ export class IdeaAnalyzer {
       const result: GitHubSearchResult = {
         repos,
         total_count: (data.total_count as number) || 0,
-        summary: `GitHub에서 ${data.total_count || 0}개 중 유의미한 저장소 ${repos.length}개를 발견했습니다.`,
+        summary: `유의미한 GitHub 저장소 ${repos.length}개를 선별했습니다 (전체 검색 모수 ${data.total_count || 0}개).`,
       };
 
       cacheSet(`github:${query}`, result);

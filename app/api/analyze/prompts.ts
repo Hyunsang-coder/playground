@@ -386,3 +386,36 @@ ${dataSummary}
 - has_blocking_issues=true이면 verdict는 PIVOT 또는 KILL을 우선 고려하세요.
 - has_blocking_issues=true일 때 alternative_ideas에는 공식 API가 있는 대안을 포함하세요.`;
 }
+
+export function buildDataVerificationPrompt(
+  sources: { name: string; urls: string[]; snippets: string[] }[]
+): string {
+  const sourceText = sources
+    .map((s, i) => {
+      const snippets = s.snippets.slice(0, 3).map(sched => `- ${sched}`).join("\n");
+      return `Source ${i + 1}: ${s.name}\nURLs: ${s.urls.join(", ")}\nSnippets:\n${snippets}\n`;
+    })
+    .join("\n---\n");
+
+  return `당신은 데이터 엔지니어입니다. 웹 검색 결과를 바탕으로 외부 데이터 소스의 기술적 가용성을 검증하세요.
+
+${sourceText}
+
+각 소스에 대해 다음 기준을 엄격히 적용하여 판정하세요:
+1. has_official_api: "API Documentation", "Developer Portal", "REST API" 등이 명시적으로 존재하면 true.
+2. crawlable: 공식 API는 없지만, 공개된 웹 페이지에서 데이터를 수집할 수 있으면 true. (단, "Scraping Prohibited", "Robot detection" 언급이 있거나, 로그인/캡차가 필수인 경우 false)
+3. blocking: API도 없고, 크롤링도 불가능하거나 법적/기술적 제약이 심각하면 true.
+
+반드시 순수 JSON으로만 응답하세요:
+{
+  "results": [
+    {
+      "name": "Source Name",
+      "has_official_api": boolean,
+      "crawlable": boolean,
+      "blocking": boolean,
+      "reason": "한 줄 판정 이유 (API 문서 URL 또는 제한 사유 포함)"
+    }
+  ]
+}`;
+}

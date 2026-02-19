@@ -19,6 +19,7 @@ export interface GitHubRepo {
 
 export interface WebSearchResult {
   competitors: Competitor[];
+  github_repos?: GitHubRepo[]; // Merged Step 1 result
   raw_count: number;
   summary: string;
 }

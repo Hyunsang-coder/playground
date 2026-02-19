@@ -19,6 +19,7 @@ import {
   type FeasibilityResult,
   type DifferentiationResult,
   type DataAvailabilityResult,
+  type GitHubRepo,
 } from "./utils";
 import {
   buildSearchQueriesPrompt,
@@ -29,6 +30,7 @@ import {
   buildFeasibilityPrompt,
   buildDifferentiationPrompt,
   buildVerdictPrompt,
+  buildDataVerificationPrompt,
 } from "./prompts";
 import {
   evaluateDataSourceWithRules,
@@ -118,54 +120,55 @@ export class IdeaAnalyzer {
     const runStep4 = shouldRun(4);
     const runStep5 = shouldRun(5);
 
-    const searchQueries = runStep1 || runStep2
+    const searchQueries = runStep1
       ? await this.generateSearchQueries(idea)
       : { web_queries: [idea], github_query: idea };
 
+    // --- Step 1: Market Research (Merged Web + GitHub) ---
     let competitors: WebSearchResult = {
       competitors: [],
-      summary: "경쟁 제품 탐색 단계가 비활성화되었습니다.",
       raw_count: 0,
+      summary: "시장 조사 단계가 비활성화되었습니다.",
+    };
+    let githubResults: GitHubSearchResult = {
+      repos: [],
+      total_count: 0,
+      summary: "시장 조사 단계가 비활성화되었습니다.",
     };
 
     if (runStep1) {
       const webQueriesDisplay = (searchQueries.web_queries || [idea]).slice(0, 2).join(" / ");
+      const ghQueryDisplay = searchQueries.github_query || idea;
+
       yield {
         event: "step_start",
         data: {
           step: 1,
-          title: "경쟁 제품 탐색",
-          description: `AI 최적화 키워드로 검색 중: ${webQueriesDisplay}`,
+          title: "시장 조사 (웹 + GitHub)",
+          description: `웹(${webQueriesDisplay}) 및 GitHub(${ghQueryDisplay}) 동시 분석 중...`,
         },
       };
-      await sleep(300);
 
-      competitors = await this.searchWeb(idea, searchQueries.web_queries || []);
-      yield { event: "step_result", data: { step: 1, result: competitors } };
-    }
+      // Run searches in parallel
+      const [webResult, ghResult] = await Promise.all([
+        this.searchWeb(idea, searchQueries.web_queries || []),
+        runStep2 ? this.searchGithub(idea, searchQueries.github_query || "") : Promise.resolve(githubResults),
+      ]);
 
-    let githubResults: GitHubSearchResult = {
-      repos: [],
-      total_count: 0,
-      summary: "GitHub 유사 프로젝트 탐색 단계가 비활성화되었습니다.",
-    };
+      competitors = webResult;
+      githubResults = ghResult;
 
-    if (runStep2) {
-      const ghQueryDisplay = searchQueries.github_query || idea;
-      yield {
-        event: "step_start",
-        data: {
-          step: 2,
-          title: "GitHub 유사 프로젝트 탐색",
-          description: `AI 최적화 키워드로 검색 중: ${ghQueryDisplay}`,
-        },
+      // Merge results for UI
+      const mergedResult: WebSearchResult = {
+        ...competitors,
+        github_repos: githubResults.repos,
+        summary: `웹 결과 ${competitors.raw_count}개, GitHub 저장소 ${githubResults.repos.length}개 발견.`,
       };
-      await sleep(300);
 
-      githubResults = await this.searchGithub(idea, searchQueries.github_query || "");
-      yield { event: "step_result", data: { step: 2, result: githubResults } };
+      yield { event: "step_result", data: { step: 1, result: mergedResult } };
     }
 
+    // --- Step 2: Data Availability & Technical Feasibility ---
     const dataAvailability: DataAvailabilityResult = runStep3
       ? await this.checkDataAndLibraries(idea)
       : fallbackDataAvailability();
@@ -175,57 +178,56 @@ export class IdeaAnalyzer {
       yield {
         event: "step_start",
         data: {
-          step: 3,
-          title: "바이브코딩 실현성 분석",
-          description: "AI가 바이브코딩 난이도와 병목 지점을 분석하고 있습니다...",
+          step: 2,
+          title: "기술 실현성 및 데이터 검증",
+          description: "데이터 소스 가용성과 기술적 난이도를 심층 분석 중...",
         },
       };
-      await sleep(300);
 
       for await (const event of this.streamFeasibility(idea, dataAvailability)) {
         if (event.type === "progress") {
-          yield { event: "step_progress", data: { step: 3, text: event.text } };
+          yield { event: "step_progress", data: { step: 2, text: event.text } };
         } else {
           feasibility = event.result as unknown as FeasibilityResult;
         }
       }
 
-      yield { event: "step_result", data: { step: 3, result: feasibility } };
+      yield { event: "step_result", data: { step: 2, result: feasibility } };
     }
 
+    // --- Step 3: Differentiation ---
     let differentiation: DifferentiationResult = fallbackDifferentiation(competitors, githubResults);
     if (runStep4) {
       yield {
         event: "step_start",
         data: {
-          step: 4,
+          step: 3,
           title: "차별화 분석",
           description: "기존 제품 대비 차별점을 분석하고 있습니다...",
         },
       };
-      await sleep(300);
 
       for await (const event of this.streamDifferentiation(idea, competitors, githubResults)) {
         if (event.type === "progress") {
-          yield { event: "step_progress", data: { step: 4, text: event.text } };
+          yield { event: "step_progress", data: { step: 3, text: event.text } };
         } else {
           differentiation = event.result as unknown as DifferentiationResult;
         }
       }
 
-      yield { event: "step_result", data: { step: 4, result: differentiation } };
+      yield { event: "step_result", data: { step: 3, result: differentiation } };
     }
 
+    // --- Step 4: Verdict ---
     if (runStep5) {
       yield {
         event: "step_start",
         data: {
-          step: 5,
+          step: 4,
           title: "종합 판정",
           description: "최종 리포트를 생성하고 있습니다...",
         },
       };
-      await sleep(300);
 
       let verdict = fallbackVerdict(feasibility, differentiation);
       for await (const event of this.streamVerdict(
@@ -233,20 +235,20 @@ export class IdeaAnalyzer {
         {
           enabledSteps: activeSteps,
           competitors: runStep1 ? competitors : undefined,
-          githubResults: runStep2 ? githubResults : undefined,
+          githubResults: runStep1 ? githubResults : undefined, // Assuming Github is part of Step 1 now
           feasibility: runStep3 ? feasibility : undefined,
           differentiation: runStep4 ? differentiation : undefined,
           dataAvailability: runStep3 ? dataAvailability : undefined,
         }
       )) {
         if (event.type === "progress") {
-          yield { event: "step_progress", data: { step: 5, text: event.text } };
+          yield { event: "step_progress", data: { step: 4, text: event.text } };
         } else {
           verdict = event.result as unknown as typeof verdict;
         }
       }
 
-      yield { event: "step_result", data: { step: 5, result: verdict } };
+      yield { event: "step_result", data: { step: 4, result: verdict } };
     }
 
     yield { event: "done", data: { message: "분석 완료" } };
@@ -926,10 +928,10 @@ export class IdeaAnalyzer {
         const queriesForSource = custom.length >= 2
           ? custom
           : [
-              `${src.name} official API documentation`,
-              `${src.name} developer portal`,
-              `${src.name} scraping terms of service`,
-            ];
+            `${src.name} official API documentation`,
+            `${src.name} developer portal`,
+            `${src.name} scraping terms of service`,
+          ];
         sourceQueriesByName.set(src.name, queriesForSource);
         sourceQueries.push(...queriesForSource);
       }
@@ -967,26 +969,23 @@ export class IdeaAnalyzer {
         Promise.all(libraries.map((library) => this.validateLibraryOnNpm(library))),
       ]);
 
-      // Merge: Claude judgment primary, rules as fallback, then verify URLs
+      // LLM verification
+      const llmVerification = await this.verifyDataAvailabilityWithLLM(dataSources, evidenceMap);
+
       const dataSourceResult = await Promise.all(
         dataSources.map(async (source, i) => {
           const ruleResult = ruleBasedDataSources[i];
-          const claudeSource = claudeJudgment?.data_sources?.find(
-            (s) => s.name.toLowerCase() === source.toLowerCase()
-          );
+          const llmResult = llmVerification.find(v => v.name === source);
 
-          const merged = claudeSource
-            ? {
-                name: source,
-                has_official_api: Boolean(claudeSource.has_official_api),
-                crawlable: Boolean(claudeSource.crawlable),
-                evidence_url: claudeSource.evidence_url || ruleResult.evidence_url,
-                blocking: Boolean(claudeSource.blocking),
-                note: claudeSource.blocking === ruleResult.blocking
-                  ? claudeSource.note
-                  : `${claudeSource.note} (규칙 판정: ${ruleResult.blocking ? "블로킹" : "통과"} → AI 판정 우선)`,
-              }
-            : ruleResult;
+          // Merge: LLM result takes precedence for blocking/api status if available
+          const merged = {
+            name: source,
+            has_official_api: llmResult ? llmResult.has_official_api : ruleResult.has_official_api,
+            crawlable: llmResult ? llmResult.crawlable : ruleResult.crawlable,
+            evidence_url: ruleResult.evidence_url, // Keep evidence URL from rules as it picks from actual URLs
+            blocking: llmResult ? llmResult.blocking : ruleResult.blocking,
+            note: llmResult ? `${llmResult.reason} (AI 검증)` : ruleResult.note,
+          };
 
           // URL HEAD verification: confirm evidence URL is actually reachable
           if (merged.evidence_url) {
@@ -1099,8 +1098,58 @@ export class IdeaAnalyzer {
         context.competitors || { competitors: [], raw_count: 0, summary: "미선택" },
         context.githubResults || { repos: [], total_count: 0, summary: "미선택" }
       )
-    );
+    )
+
     const prompt = buildVerdictPrompt(idea, context);
     yield* this.callClaudeStream(prompt, fallback as unknown as Record<string, unknown>);
+  }
+
+  private async verifyDataAvailabilityWithLLM(
+    dataSources: string[],
+    evidenceMap: Map<string, SearchEvidence>
+  ): Promise<Array<{ name: string; has_official_api: boolean; crawlable: boolean; blocking: boolean; reason: string }>> {
+    if (!this.anthropicApiKey || dataSources.length === 0) return [];
+
+    const sourcesWithEvidence = dataSources.map(source => {
+      // Find evidence relevant to this source
+      // This is a bit broad, but we can look for any evidence where the query contained the source name
+      // or just pass all evidence. For now, let's pass loosely matched evidence.
+      const relevantEvidence: { urls: string[]; snippets: string[] } = { urls: [], snippets: [] };
+      for (const [query, evidence] of evidenceMap) {
+        if (query.toLowerCase().includes(source.toLowerCase())) {
+          relevantEvidence.urls.push(...evidence.urls);
+          relevantEvidence.snippets.push(...evidence.snippets);
+        }
+      }
+      return {
+        name: source,
+        urls: relevantEvidence.urls.slice(0, 5),
+        snippets: relevantEvidence.snippets.slice(0, 5),
+      };
+    });
+
+    const prompt = buildDataVerificationPrompt(sourcesWithEvidence);
+
+    try {
+      const { text } = await generateText({
+        model: anthropic("claude-sonnet-4-6"),
+        maxOutputTokens: 1024,
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      const parsed = parseJsonSafe<{
+        results: Array<{
+          name: string;
+          has_official_api: boolean;
+          crawlable: boolean;
+          blocking: boolean;
+          reason: string;
+        }>;
+      }>(text.trim(), { results: [] });
+
+      return parsed.results || [];
+    } catch {
+      return [];
+    }
   }
 }

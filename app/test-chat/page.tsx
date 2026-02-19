@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 
@@ -10,14 +10,6 @@ const MOCK_RESULTS = [
 ];
 
 export default function TestChatPage() {
-  const [debugLog, setDebugLog] = useState<string[]>([]);
-  const logRef = useRef<HTMLDivElement>(null);
-
-  const log = useCallback(
-    (msg: string) => setDebugLog((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]),
-    []
-  );
-
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -28,29 +20,24 @@ export default function TestChatPage() {
   );
 
   const { messages, sendMessage, status, error } = useChat({ transport });
-
-  useEffect(() => {
-    log(`status: ${status}`);
-  }, [status, log]);
-
-  useEffect(() => {
-    if (error) log(`error: ${error.message}`);
-  }, [error, log]);
-
-  useEffect(() => {
-    if (messages.length > 0) {
-      const last = messages[messages.length - 1];
-      log(`msg[${messages.length - 1}] role=${last.role} parts=${JSON.stringify(last.parts)} content="${(last as unknown as Record<string, unknown>).content || "(no content)"}"`);
+  const debugLog = useMemo(() => {
+    const logs: string[] = [];
+    logs.push(`status: ${status}`);
+    logs.push(`error: ${error?.message || "none"}`);
+    for (let i = 0; i < messages.length; i += 1) {
+      const message = messages[i];
+      logs.push(
+        `msg[${i}] role=${message.role} parts=${JSON.stringify(message.parts)} content=${JSON.stringify((message as unknown as Record<string, unknown>).content)}`
+      );
     }
-    logRef.current?.scrollTo(0, logRef.current.scrollHeight);
-  }, [messages, log]);
+    return logs;
+  }, [status, error, messages]);
 
   const [input, setInput] = useState("");
 
   const handleSend = async (text: string) => {
     if (!text.trim()) return;
     setInput("");
-    log(`sending: "${text}"`);
     await sendMessage({ text });
   };
 
@@ -78,7 +65,7 @@ export default function TestChatPage() {
         </div>
 
         {/* Debug log */}
-        <div ref={logRef} className="bg-slate-900 text-green-400 rounded-lg p-4 max-h-[70vh] overflow-y-auto">
+        <div className="bg-slate-900 text-green-400 rounded-lg p-4 max-h-[70vh] overflow-y-auto">
           <h2 className="font-bold text-green-300 mb-2">Debug Log</h2>
           {debugLog.map((l, i) => (
             <div key={i}>{l}</div>

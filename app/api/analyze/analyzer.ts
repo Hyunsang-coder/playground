@@ -25,17 +25,34 @@ import {
   buildRefineSearchQueriesPrompt,
   buildFilterRelevantPrompt,
   buildDataExtractionPrompt,
-  buildDataJudgmentPrompt,
   buildFeasibilityPrompt,
   buildDifferentiationPrompt,
   buildVerdictPrompt,
 } from "./prompts";
+import {
+  evaluateDataSourceWithRules,
+  selectNpmCandidate,
+  type NpmSearchCandidate,
+} from "./rules";
 
 type ClaudeStreamEvent =
   | { type: "progress"; text: string }
   | { type: "result"; result: Record<string, unknown> };
 
 type SearchEvidence = { urls: string[]; snippets: string[] };
+type NpmSearchResponse = {
+  objects?: Array<{
+    package?: {
+      name?: string;
+      description?: string;
+      keywords?: string[];
+    };
+    score?: {
+      final?: number;
+    };
+  }>;
+};
+type RobotsCheckResult = { disallowAll: boolean; domain?: string };
 
 export class IdeaAnalyzer {
   private readonly dataAvailabilityCacheTtlMs = 1_800_000; // 30 minutes
@@ -548,9 +565,10 @@ export class IdeaAnalyzer {
   }
 
   private async doDataAvailabilitySearch(
-    queries: string[]
+    queries: string[],
+    maxQueries = 6
   ): Promise<Map<string, SearchEvidence>> {
-    const limitedQueries = queries.slice(0, 6);
+    const limitedQueries = queries.slice(0, maxQueries);
 
     const results = await Promise.all(
       limitedQueries.map(async (query) => {
@@ -598,6 +616,207 @@ export class IdeaAnalyzer {
     return new Map(results);
   }
 
+  private mergeEvidenceByQueries(
+    evidenceMap: Map<string, SearchEvidence>,
+    queries: string[]
+  ): SearchEvidence {
+    const urls = new Set<string>();
+    const snippets = new Set<string>();
+
+    for (const query of queries) {
+      const evidence = evidenceMap.get(query);
+      if (!evidence) continue;
+
+      for (const url of evidence.urls) {
+        if (url) urls.add(url);
+      }
+      for (const snippet of evidence.snippets) {
+        if (snippet) snippets.add(snippet);
+      }
+    }
+
+    return {
+      urls: Array.from(urls).slice(0, 8),
+      snippets: Array.from(snippets).slice(0, 8),
+    };
+  }
+
+  private isRobotsDisallowAll(content: string): boolean {
+    const lines = content
+      .split(/\r?\n/)
+      .map((line) => line.replace(/#.*/, "").trim().toLowerCase())
+      .filter(Boolean);
+
+    let appliesToStar = false;
+    let sawStarGroup = false;
+    let hasDisallowAll = false;
+    let hasAllowRoot = false;
+
+    for (const line of lines) {
+      if (line.startsWith("user-agent:")) {
+        const agent = line.slice("user-agent:".length).trim();
+        appliesToStar = agent === "*";
+        if (appliesToStar) sawStarGroup = true;
+        continue;
+      }
+
+      if (!appliesToStar) continue;
+
+      if (line.startsWith("disallow:")) {
+        const value = line.slice("disallow:".length).trim();
+        if (value === "/") hasDisallowAll = true;
+        if (value === "") hasAllowRoot = true;
+      } else if (line.startsWith("allow:")) {
+        const value = line.slice("allow:".length).trim();
+        if (value === "/" || value === "") hasAllowRoot = true;
+      }
+    }
+
+    return sawStarGroup && hasDisallowAll && !hasAllowRoot;
+  }
+
+  private async checkRobotsPolicy(urls: string[]): Promise<RobotsCheckResult> {
+    const domains = Array.from(
+      new Set(
+        urls
+          .map((url) => this.extractDomain(url))
+          .filter((domain) => domain.length > 0)
+      )
+    ).slice(0, 2);
+
+    for (const domain of domains) {
+      try {
+        const resp = await fetch(`https://${domain}/robots.txt`, {
+          signal: AbortSignal.timeout(6000),
+        });
+        if (!resp.ok) continue;
+        const text = await resp.text();
+        if (this.isRobotsDisallowAll(text)) {
+          return { disallowAll: true, domain };
+        }
+      } catch {
+        // ignore robots lookup failures
+      }
+    }
+
+    return { disallowAll: false };
+  }
+
+  private looksLikeNpmPackageName(value: string): boolean {
+    return /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/i.test(value.trim());
+  }
+
+  private normalizeLibraryInput(raw: string): { query: string; isCategoryHint: boolean } {
+    const trimmed = raw.trim().replace(/^npm[:\s]+/i, "");
+    const categoryMatch = trimmed.match(/^category\s*:\s*(.+)$/i);
+    if (categoryMatch) {
+      return { query: categoryMatch[1].trim(), isCategoryHint: true };
+    }
+    return { query: trimmed, isCategoryHint: false };
+  }
+
+  private async checkNpmPackageExists(packageName: string): Promise<boolean> {
+    if (!packageName || !this.looksLikeNpmPackageName(packageName)) return false;
+
+    try {
+      const resp = await fetch(`https://registry.npmjs.org/${encodeURIComponent(packageName)}`, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(8000),
+      });
+      return resp.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  private async searchNpmCandidates(query: string): Promise<NpmSearchCandidate[]> {
+    if (!query) return [];
+
+    try {
+      const resp = await fetch(
+        `https://registry.npmjs.org/-/v1/search?text=${encodeURIComponent(query)}&size=6`,
+        {
+          headers: { Accept: "application/json" },
+          signal: AbortSignal.timeout(8000),
+        }
+      );
+      if (!resp.ok) return [];
+
+      const data = await resp.json() as NpmSearchResponse;
+      return (data.objects || [])
+        .map((item) => ({
+          name: item.package?.name || "",
+          description: item.package?.description || "",
+          keywords: Array.isArray(item.package?.keywords) ? item.package?.keywords : [],
+          score: item.score?.final || 0,
+        }))
+        .filter((item) => item.name.length > 0);
+    } catch {
+      return [];
+    }
+  }
+
+  private async validateLibraryOnNpm(library: string): Promise<{
+    name: string;
+    available_on_npm: boolean;
+    package_name?: string;
+    note: string;
+  }> {
+    const { query, isCategoryHint } = this.normalizeLibraryInput(library);
+    if (!query) {
+      return {
+        name: library || "Unknown library",
+        available_on_npm: false,
+        note: "빈 라이브러리 입력",
+      };
+    }
+
+    if (this.looksLikeNpmPackageName(query)) {
+      const exists = await this.checkNpmPackageExists(query);
+      if (exists) {
+        return {
+          name: library,
+          available_on_npm: true,
+          package_name: query,
+          note: `npm registry에서 ${query} 확인`,
+        };
+      }
+    }
+
+    const candidates = await this.searchNpmCandidates(query);
+    const selection = selectNpmCandidate(query, candidates);
+
+    if (selection.package_name && selection.confident) {
+      const confirmed = await this.checkNpmPackageExists(selection.package_name);
+      if (confirmed) {
+        const inferredNote = isCategoryHint
+          ? `${selection.note} (category 기반 추론)`
+          : selection.note;
+        return {
+          name: library,
+          available_on_npm: true,
+          package_name: selection.package_name,
+          note: inferredNote,
+        };
+      }
+    }
+
+    if (selection.package_name) {
+      return {
+        name: library,
+        available_on_npm: false,
+        package_name: selection.package_name,
+        note: `${selection.note} (수동 확인 권장)`,
+      };
+    }
+
+    return {
+      name: library,
+      available_on_npm: false,
+      note: selection.note,
+    };
+  }
+
   private async checkDataAndLibraries(idea: string): Promise<DataAvailabilityResult> {
     if (!this.anthropicApiKey) {
       return fallbackDataAvailability();
@@ -635,71 +854,51 @@ export class IdeaAnalyzer {
         return fallback;
       }
 
-      const queries: string[] = [];
+      const sourceQueriesByName = new Map<string, string[]>();
+      const sourceQueries: string[] = [];
       for (const source of dataSources) {
-        queries.push(`${source} official API documentation`);
-        queries.push(`${source} developer portal`);
-      }
-      for (const library of libraries) {
-        queries.push(`npm ${library} package`);
-      }
-
-      const limitedQueries = queries.slice(0, 6);
-      const evidenceMap = await this.doDataAvailabilitySearch(limitedQueries);
-      const evidence: Record<string, { urls: string[]; snippets: string[] }> = {};
-
-      for (const q of limitedQueries) {
-        evidence[q] = evidenceMap.get(q) || { urls: [], snippets: [] };
+        const queriesForSource = [
+          `${source} official API documentation`,
+          `${source} developer portal`,
+          `${source} scraping terms of service`,
+        ];
+        sourceQueriesByName.set(source, queriesForSource);
+        sourceQueries.push(...queriesForSource);
       }
 
-      const judgmentPrompt = buildDataJudgmentPrompt(dataSources, libraries, evidence);
-      const { text: judgmentText } = await generateText({
-        model: anthropic("claude-sonnet-4-6"),
-        maxOutputTokens: 2048,
-        messages: [{ role: "user", content: judgmentPrompt }],
-      });
+      const uniqueQueries = Array.from(new Set(sourceQueries));
+      const evidenceMap = await this.doDataAvailabilitySearch(uniqueQueries, 9);
 
-      const parsed = parseJsonSafe<Partial<DataAvailabilityResult>>(
-        judgmentText.trim(),
-        fallbackDataAvailability()
+      const dataSourceResult = await Promise.all(
+        dataSources.map(async (source) => {
+          const evidence = this.mergeEvidenceByQueries(
+            evidenceMap,
+            sourceQueriesByName.get(source) || []
+          );
+          const robots = await this.checkRobotsPolicy(evidence.urls);
+          const judged = evaluateDataSourceWithRules({
+            urls: evidence.urls,
+            snippets: evidence.snippets,
+            robotsDisallowAll: robots.disallowAll,
+            robotsCheckedDomain: robots.domain,
+          });
+
+          return {
+            name: source,
+            has_official_api: judged.has_official_api,
+            crawlable: judged.crawlable,
+            evidence_url: judged.evidence_url,
+            blocking: judged.blocking,
+            note: judged.note,
+          };
+        })
       );
 
-      const dataSourceResult = Array.isArray(parsed.data_sources)
-        ? parsed.data_sources
-          .filter((item): item is NonNullable<Partial<DataAvailabilityResult>["data_sources"]>[number] =>
-            typeof item === "object" && item !== null
-          )
-          .map((item, index) => {
-            const hasOfficialApi = Boolean(item.has_official_api);
-            const crawlable = Boolean(item.crawlable);
-            return {
-              name: typeof item.name === "string" && item.name.trim() ? item.name.trim() : dataSources[index] || "Unknown source",
-              has_official_api: hasOfficialApi,
-              crawlable,
-              evidence_url: typeof item.evidence_url === "string" ? item.evidence_url : undefined,
-              // PLAN 원칙: 공식 API 또는 크롤링 가능이면 블로커가 아니다.
-              blocking: Boolean(item.blocking) && !hasOfficialApi && !crawlable,
-              note: typeof item.note === "string" && item.note.trim() ? item.note.trim() : "근거 부족",
-            };
-          })
-        : [];
+      const libraryResult = await Promise.all(
+        libraries.map((library) => this.validateLibraryOnNpm(library))
+      );
 
-      const libraryResult = Array.isArray(parsed.libraries)
-        ? parsed.libraries
-          .filter((item): item is NonNullable<Partial<DataAvailabilityResult>["libraries"]>[number] =>
-            typeof item === "object" && item !== null
-          )
-          .map((item, index) => ({
-            name: typeof item.name === "string" && item.name.trim() ? item.name.trim() : libraries[index] || "Unknown library",
-            available_on_npm: Boolean(item.available_on_npm),
-            package_name: typeof item.package_name === "string" && item.package_name.trim()
-              ? item.package_name.trim()
-              : undefined,
-            note: typeof item.note === "string" && item.note.trim() ? item.note.trim() : "근거 부족",
-          }))
-        : [];
-
-      const hasBlockingIssues = dataSourceResult.some((source) => source.blocking) || Boolean(parsed.has_blocking_issues);
+      const hasBlockingIssues = dataSourceResult.some((source) => source.blocking);
       const result: DataAvailabilityResult = {
         data_sources: dataSourceResult,
         libraries: libraryResult,

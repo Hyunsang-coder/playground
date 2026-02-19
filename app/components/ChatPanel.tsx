@@ -34,9 +34,9 @@ export default function ChatPanel({ analysisResults, idea }: Props) {
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
-        body: { analysisResults: resultsContext },
+        body: { analysisResults: resultsContext, idea },
       }),
-    [resultsContext]
+    [resultsContext, idea]
   );
 
   const { messages, sendMessage, status } = useChat({ transport });

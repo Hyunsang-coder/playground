@@ -1,7 +1,14 @@
 "use client";
 
 import { CheckCircle2, Loader2, Circle, Globe, Github, Brain, Swords, Gavel } from "lucide-react";
-import type { AnalysisStep } from "../types";
+import type {
+  AnalysisStep,
+  WebSearchResult,
+  GitHubSearchResult,
+  FeasibilityResult,
+  DifferentiationResult,
+  VerdictResult,
+} from "../types";
 import CompetitorList from "./CompetitorList";
 import GitHubList from "./GitHubList";
 import FeasibilityCard from "./FeasibilityCard";
@@ -32,6 +39,8 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function StepCard({ step, idea, onReanalyze }: Props) {
+  const result = step.result;
+
   return (
     <div className="step-card animate-slide-up">
       {/* Header */}
@@ -62,11 +71,11 @@ export default function StepCard({ step, idea, onReanalyze }: Props) {
       {/* Result content */}
       {step.status === "done" && step.result != null ? (
         <div className="mt-4 animate-fade-in">
-          {step.step === 1 && <CompetitorList data={step.result as any} />}
-          {step.step === 2 && <GitHubList data={step.result as any} />}
-          {step.step === 3 && <FeasibilityCard data={step.result as any} />}
-          {step.step === 4 && <DifferentiationCard data={step.result as any} />}
-          {step.step === 5 && <VerdictCard data={step.result as any} idea={idea} onReanalyze={onReanalyze} />}
+          {step.step === 1 && <CompetitorList data={result as WebSearchResult} />}
+          {step.step === 2 && <GitHubList data={result as GitHubSearchResult} />}
+          {step.step === 3 && <FeasibilityCard data={result as FeasibilityResult} />}
+          {step.step === 4 && <DifferentiationCard data={result as DifferentiationResult} />}
+          {step.step === 5 && <VerdictCard data={result as VerdictResult} idea={idea} onReanalyze={onReanalyze} />}
         </div>
       ) : null}
 

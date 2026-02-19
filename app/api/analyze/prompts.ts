@@ -78,8 +78,9 @@ export function buildDataExtractionPrompt(idea: string): string {
 규칙:
 - data_sources: 외부 서비스/플랫폼 데이터 (최대 3개, 영어)
   예) "Coupang product reviews", "Naver blog posts", "YouTube video metadata"
-- libraries: 핵심 npm 패키지 카테고리 (최대 3개, 영어)
-  예) "sentiment analysis", "PDF parsing", "image recognition"
+- libraries: 가능한 한 실제 npm 패키지명으로 작성 (최대 3개, 영어)
+  예) "@tiptap/react", "pptxgenjs", "cheerio"
+  정확한 패키지명을 모르면 "category:<설명>" 형식 사용
 - React/Next.js/TypeScript 같은 범용 의존성 제외
 - 아이디어에 명확히 필요한 것만 포함
 

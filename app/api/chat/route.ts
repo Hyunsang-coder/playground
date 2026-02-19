@@ -2,12 +2,15 @@ import { streamText, convertToModelMessages } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 
 export async function POST(req: Request) {
-  const { messages, analysisResults } = await req.json();
+  const { messages, analysisResults, idea } = await req.json();
 
   const systemPrompt = `당신은 Valid8 AI 분석 어시스턴트입니다. 사용자의 해커톤/사이드 프로젝트 아이디어에 대해 이미 5단계 분석이 완료되었습니다.
 
 분석 결과 컨텍스트:
 ${JSON.stringify(analysisResults, null, 2)}
+
+원본 아이디어:
+${typeof idea === "string" ? idea : ""}
 
 위 분석 결과를 기반으로 사용자의 후속 질문에 답변하세요.
 - 구체적인 기술 구현 방법, 차별화 전략, 피벗 방향 등을 조언하세요.

@@ -26,6 +26,7 @@ const EXAMPLES = [
 export default function IdeaInput({ onSubmit, isLoading }: Props) {
   const [idea, setIdea] = useState("");
   const [enabledSteps, setEnabledSteps] = useState<number[]>([1, 2, 3, 4, 5]);
+  const isStep5Only = enabledSteps.length === 1 && enabledSteps.includes(5);
 
   const toggleStep = (step: number) => {
     setEnabledSteps((prev) =>
@@ -38,7 +39,7 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!idea.trim() || isLoading || enabledSteps.length === 0) return;
+    if (!idea.trim() || isLoading || enabledSteps.length === 0 || isStep5Only) return;
     onSubmit(idea.trim(), enabledSteps);
   };
 
@@ -110,12 +111,15 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
         {enabledSteps.length === 0 && (
           <p className="mt-3 text-xs text-rose-600">최소 1개 이상의 단계를 선택해야 합니다.</p>
         )}
+        {isStep5Only && (
+          <p className="mt-3 text-xs text-rose-600">종합 판정(5번)은 단독 선택할 수 없습니다. 1~4번 중 하나 이상을 함께 선택하세요.</p>
+        )}
       </div>
 
       {/* Submit button */}
       <button
         type="submit"
-        disabled={!idea.trim() || isLoading || enabledSteps.length === 0}
+        disabled={!idea.trim() || isLoading || enabledSteps.length === 0 || isStep5Only}
         className="flex w-full items-center justify-center gap-3 rounded-2xl bg-brand px-6 sm:px-8 py-3.5 sm:py-4 text-lg sm:text-xl font-bold text-white shadow-lg shadow-brand/20 transition-all hover:bg-indigo-600 hover:shadow-xl hover:shadow-brand/25 disabled:opacity-40 disabled:shadow-none disabled:hover:bg-brand"
       >
         <Search className="h-6 w-6" />

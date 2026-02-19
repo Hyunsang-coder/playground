@@ -21,7 +21,14 @@ export function useAnalysis() {
       });
 
       if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
+        let message = `Server error: ${response.status}`;
+        try {
+          const payload = await response.json() as { error?: string };
+          if (payload.error) message = payload.error;
+        } catch {
+          // ignore parse error
+        }
+        throw new Error(message);
       }
 
       const reader = response.body?.getReader();

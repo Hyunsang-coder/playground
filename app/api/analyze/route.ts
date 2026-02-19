@@ -23,6 +23,13 @@ export async function POST(request: NextRequest) {
     ? enabledSteps.filter((s): s is number => validSteps.includes(s))
     : validSteps;
   const finalSteps = sanitizedSteps.length > 0 ? sanitizedSteps : validSteps;
+  const isStep5Only = finalSteps.length === 1 && finalSteps[0] === 5;
+  if (isStep5Only) {
+    return NextResponse.json(
+      { error: "step 5 cannot run alone. Select at least one of steps 1-4 with step 5." },
+      { status: 400 }
+    );
+  }
 
   // 2. Create analyzer with env-based API keys
   const analyzer = new IdeaAnalyzer(

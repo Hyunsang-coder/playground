@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RotateCcw } from "lucide-react";
+import { Loader2, RotateCcw } from "lucide-react";
 import Header from "./components/Header";
 import IdeaInput from "./components/IdeaInput";
 import StepCard from "./components/StepCard";
@@ -13,7 +13,7 @@ export default function Page() {
   const [currentIdea, setCurrentIdea] = useState("");
   const [enabledSteps, setEnabledSteps] = useState<number[]>([1, 2, 3, 4, 5]);
 
-  const hasResults = steps.length > 0;
+  const hasResults = steps.length > 0 || isAnalyzing;
   const completedSteps = steps.filter((s) => s.status === "done").length;
   const progress = enabledSteps.length > 0 ? (completedSteps / enabledSteps.length) * 100 : 0;
   const allDone = completedSteps === enabledSteps.length && enabledSteps.length > 0;
@@ -93,6 +93,25 @@ export default function Page() {
             </div>
 
             {/* Step cards */}
+            {isAnalyzing && steps.length === 0 && (
+              <div className="step-card animate-slide-up">
+                <div className="mb-4 flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-brand">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg text-slate-800">분석 준비 중</h3>
+                    <p className="text-sm text-slate-500">AI가 검색 전략을 준비하고 있습니다...</p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="h-4 w-3/4 rounded shimmer-skeleton" />
+                  <div className="h-4 w-2/3 rounded shimmer-skeleton" />
+                  <div className="h-4 w-1/2 rounded shimmer-skeleton" />
+                </div>
+              </div>
+            )}
+
             {steps.map((step) => (
               <StepCard
                 key={step.step}

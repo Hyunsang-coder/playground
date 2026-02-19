@@ -54,8 +54,13 @@ export class IdeaAnalyzer {
   ): AsyncGenerator<SSEEvent> {
     const activeSteps = enabledSteps.length > 0 ? enabledSteps : [1, 2, 3, 4, 5];
     const shouldRun = (step: number) => activeSteps.includes(step);
+    const runStep1 = shouldRun(1);
+    const runStep2 = shouldRun(2);
+    const runStep3 = shouldRun(3);
+    const runStep4 = shouldRun(4);
+    const runStep5 = shouldRun(5);
 
-    const searchQueries = shouldRun(1) || shouldRun(2)
+    const searchQueries = runStep1 || runStep2
       ? await this.generateSearchQueries(idea)
       : { web_queries: [idea], github_query: idea };
 
@@ -65,7 +70,7 @@ export class IdeaAnalyzer {
       raw_count: 0,
     };
 
-    if (shouldRun(1)) {
+    if (runStep1) {
       const webQueriesDisplay = (searchQueries.web_queries || [idea]).slice(0, 2).join(" / ");
       yield {
         event: "step_start",
@@ -87,7 +92,7 @@ export class IdeaAnalyzer {
       summary: "GitHub 유사 프로젝트 탐색 단계가 비활성화되었습니다.",
     };
 
-    if (shouldRun(2)) {
+    if (runStep2) {
       const ghQueryDisplay = searchQueries.github_query || idea;
       yield {
         event: "step_start",
@@ -103,12 +108,12 @@ export class IdeaAnalyzer {
       yield { event: "step_result", data: { step: 2, result: githubResults } };
     }
 
-    const dataAvailability: DataAvailabilityResult = shouldRun(3)
+    const dataAvailability: DataAvailabilityResult = runStep3
       ? await this.checkDataAndLibraries(idea)
       : fallbackDataAvailability();
 
     let feasibility: FeasibilityResult = fallbackFeasibility();
-    if (shouldRun(3)) {
+    if (runStep3) {
       yield {
         event: "step_start",
         data: {
@@ -119,12 +124,7 @@ export class IdeaAnalyzer {
       };
       await sleep(300);
 
-      for await (const event of this.streamFeasibility(
-        idea,
-        competitors,
-        githubResults,
-        dataAvailability
-      )) {
+      for await (const event of this.streamFeasibility(idea, dataAvailability)) {
         if (event.type === "progress") {
           yield { event: "step_progress", data: { step: 3, text: event.text } };
         } else {
@@ -136,7 +136,7 @@ export class IdeaAnalyzer {
     }
 
     let differentiation: DifferentiationResult = fallbackDifferentiation(competitors, githubResults);
-    if (shouldRun(4)) {
+    if (runStep4) {
       yield {
         event: "step_start",
         data: {
@@ -158,7 +158,7 @@ export class IdeaAnalyzer {
       yield { event: "step_result", data: { step: 4, result: differentiation } };
     }
 
-    if (shouldRun(5)) {
+    if (runStep5) {
       yield {
         event: "step_start",
         data: {
@@ -172,11 +172,14 @@ export class IdeaAnalyzer {
       let verdict = fallbackVerdict(feasibility, differentiation);
       for await (const event of this.streamVerdict(
         idea,
-        competitors,
-        githubResults,
-        feasibility,
-        differentiation,
-        dataAvailability
+        {
+          enabledSteps: activeSteps,
+          competitors: runStep1 ? competitors : undefined,
+          githubResults: runStep2 ? githubResults : undefined,
+          feasibility: runStep3 ? feasibility : undefined,
+          differentiation: runStep4 ? differentiation : undefined,
+          dataAvailability: runStep3 ? dataAvailability : undefined,
+        }
       )) {
         if (event.type === "progress") {
           yield { event: "step_progress", data: { step: 5, text: event.text } };
@@ -609,12 +612,10 @@ export class IdeaAnalyzer {
 
   private async *streamFeasibility(
     idea: string,
-    competitors: WebSearchResult,
-    githubResults: GitHubSearchResult,
     dataAvailability: DataAvailabilityResult
   ): AsyncGenerator<ClaudeStreamEvent> {
     const fallback = fallbackFeasibility();
-    const prompt = buildFeasibilityPrompt(idea, competitors, githubResults, dataAvailability);
+    const prompt = buildFeasibilityPrompt(idea, dataAvailability);
 
     for await (const event of this.callClaudeStream(prompt, fallback as unknown as Record<string, unknown>)) {
       if (event.type === "result") {
@@ -637,21 +638,23 @@ export class IdeaAnalyzer {
 
   private async *streamVerdict(
     idea: string,
-    competitors: WebSearchResult,
-    githubResults: GitHubSearchResult,
-    feasibility: FeasibilityResult,
-    differentiation: DifferentiationResult,
-    dataAvailability: DataAvailabilityResult
+    context: {
+      enabledSteps: number[];
+      competitors?: WebSearchResult;
+      githubResults?: GitHubSearchResult;
+      feasibility?: FeasibilityResult;
+      differentiation?: DifferentiationResult;
+      dataAvailability?: DataAvailabilityResult;
+    }
   ): AsyncGenerator<ClaudeStreamEvent> {
-    const fallback = fallbackVerdict(feasibility, differentiation);
-    const prompt = buildVerdictPrompt(
-      idea,
-      competitors,
-      githubResults,
-      feasibility,
-      differentiation,
-      dataAvailability
+    const fallback = fallbackVerdict(
+      context.feasibility || fallbackFeasibility(),
+      context.differentiation || fallbackDifferentiation(
+        context.competitors || { competitors: [], raw_count: 0, summary: "미선택" },
+        context.githubResults || { repos: [], total_count: 0, summary: "미선택" }
+      )
     );
+    const prompt = buildVerdictPrompt(idea, context);
     yield* this.callClaudeStream(prompt, fallback as unknown as Record<string, unknown>);
   }
 }

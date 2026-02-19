@@ -152,15 +152,8 @@ ${evidenceText}
 
 export function buildFeasibilityPrompt(
   idea: string,
-  competitors: WebSearchResult,
-  githubResults: GitHubSearchResult,
   dataAvailability?: DataAvailabilityResult
 ): string {
-  const { webRelevantCount, githubRelevantCount, githubBroadCount } = getSignalCounts(
-    competitors,
-    githubResults
-  );
-
   let dataSection = "";
   if (dataAvailability && (dataAvailability.data_sources.length > 0 || dataAvailability.libraries.length > 0)) {
     const sourceLines = dataAvailability.data_sources
@@ -195,10 +188,6 @@ ${dataSection}
 아이디어: ${idea}
 개발 환경: 제한된 시간의 1인 바이브코딩
 
-웹 유의미 경쟁 후보 수(필터 통과): ${webRelevantCount}개
-GitHub 유의미 유사 저장소 수(필터 통과): ${githubRelevantCount}개
-GitHub 전체 검색 모수(참고): ${githubBroadCount}개
-
 다음을 분석해주세요:
 
 1. 바이브코딩 난이도:
@@ -216,7 +205,6 @@ GitHub 전체 검색 모수(참고): ${githubBroadCount}개
    - 유료 API 의존 여부
 
 4. 단기 개발 사이클(수시간~주말) 맥락에서의 실현 가능성 총평
-5. 반드시 "유의미 후보 수(웹/GitHub 필터 통과)"를 핵심 근거로 사용하고, "전체 검색 모수"는 보조 참고치로만 반영
 
 반드시 순수 JSON으로만 응답하세요:
 
@@ -303,39 +291,63 @@ ${githubList}
 
 export function buildVerdictPrompt(
   idea: string,
-  competitors: WebSearchResult,
-  githubResults: GitHubSearchResult,
-  feasibility: FeasibilityResult,
-  differentiation: DifferentiationResult,
-  dataAvailability?: DataAvailabilityResult
+  context: {
+    enabledSteps: number[];
+    competitors?: WebSearchResult;
+    githubResults?: GitHubSearchResult;
+    feasibility?: FeasibilityResult;
+    differentiation?: DifferentiationResult;
+    dataAvailability?: DataAvailabilityResult;
+  }
 ): string {
-  const { webRelevantCount, githubRelevantCount, githubBroadCount } = getSignalCounts(
+  const {
+    enabledSteps,
     competitors,
-    githubResults
-  );
+    githubResults,
+    feasibility,
+    differentiation,
+    dataAvailability,
+  } = context;
+
+  const hasCompetitionData = Boolean(competitors) || Boolean(githubResults);
+  const competitionMetrics = hasCompetitionData
+    ? (() => {
+      const c = competitors || { competitors: [], raw_count: 0, summary: "" };
+      const g = githubResults || { repos: [], total_count: 0, summary: "" };
+      const { webRelevantCount, githubRelevantCount, githubBroadCount } = getSignalCounts(c, g);
+      return `경쟁 현황:
+- 웹 유의미 경쟁 후보: ${webRelevantCount}개
+- GitHub 유의미 유사 저장소: ${githubRelevantCount}개
+- GitHub 전체 검색 모수(참고): ${githubBroadCount}개`;
+    })()
+    : "경쟁 현황: (미선택)";
+
+  const feasibilitySection = feasibility
+    ? `기술 실현성:
+- 점수: ${feasibility.score ?? 50}/100
+- 판정: ${feasibility.overall_feasibility || "unknown"}
+- 핵심 리스크: ${JSON.stringify(feasibility.key_risks || [])}`
+    : "기술 실현성: (미선택)";
+
+  const differentiationSection = differentiation
+    ? `차별화:
+- 경쟁 수준: ${differentiation.competition_level || "unknown"}
+- 경쟁 점수: ${differentiation.competition_score ?? 50}/100
+- 차별화 포인트: ${JSON.stringify(differentiation.unique_angles || [])}`
+    : "차별화: (미선택)";
 
   const dataSummary = dataAvailability
     ? `\n데이터/API 가용성:\n- has_blocking_issues: ${String(dataAvailability.has_blocking_issues)}\n- data_sources: ${JSON.stringify(dataAvailability.data_sources)}\n- libraries: ${JSON.stringify(dataAvailability.libraries)}`
     : "";
 
-  return `당신은 단기 개발 아이디어 심판관입니다. 혼자 만드는 개발자 관점에서 모든 분석 결과를 종합하여 최종 판정을 내리세요.
+  return `당신은 단기 개발 아이디어 심판관입니다. 혼자 만드는 개발자 관점에서 선택된 분석 결과만 종합하여 최종 판정을 내리세요.
 
 아이디어: ${idea}
+선택된 단계: ${enabledSteps.join(", ")}
 
-경쟁 현황:
-- 웹 유의미 경쟁 후보: ${webRelevantCount}개
-- GitHub 유의미 유사 저장소: ${githubRelevantCount}개
-- GitHub 전체 검색 모수(참고): ${githubBroadCount}개
-- 경쟁 수준: ${differentiation.competition_level || "unknown"}
-
-기술 실현성:
-- 점수: ${feasibility.score ?? 50}/100
-- 판정: ${feasibility.overall_feasibility || "unknown"}
-- 핵심 리스크: ${JSON.stringify(feasibility.key_risks || [])}
-
-차별화:
-- 경쟁 점수: ${differentiation.competition_score ?? 50}/100
-- 차별화 포인트: ${JSON.stringify(differentiation.unique_angles || [])}
+${competitionMetrics}
+${feasibilitySection}
+${differentiationSection}
 ${dataSummary}
 
 반드시 순수 JSON으로만 응답하세요:
@@ -356,8 +368,8 @@ ${dataSummary}
 }
 
 주의:
-- overall_score 및 scores.competition 산정은 "유의미 후보 수"를 핵심 근거로 하세요.
-- 전체 검색 모수(total_count)는 과장 가능성이 있으므로 보조 근거로만 사용하세요.
+- 제공되지 않은(미선택) 단계 정보는 절대 추정하지 말고 평가에서 제외하세요.
+- overall_score는 선택된 단계 근거만 반영하세요.
 - recommendation은 1~2문장으로 핵심만 간결하게 작성하세요.
 - alternative_ideas는 각 항목을 10자 이내의 짧은 키워드/제목으로 작성하세요.
 - has_blocking_issues=true이면 verdict는 PIVOT 또는 KILL을 우선 고려하세요.

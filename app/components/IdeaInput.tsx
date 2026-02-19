@@ -1,17 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Zap, Coffee, CheckSquare, Square } from "lucide-react";
+import { Search, CheckSquare, Square } from "lucide-react";
 
 interface Props {
-  onSubmit: (idea: string, mode: string, enabledSteps: number[]) => void;
+  onSubmit: (idea: string, enabledSteps: number[]) => void;
   isLoading: boolean;
 }
-
-const MODES = [
-  { value: "hackathon", label: "해커톤", icon: Zap, desc: "5시간 이내, 1인 바이브코딩" },
-  { value: "sideproject", label: "사이드", icon: Coffee, desc: "주말 개발, 배포까지" },
-];
 
 const STEPS = [
   { step: 1, label: "경쟁 제품 탐색" },
@@ -30,7 +25,6 @@ const EXAMPLES = [
 
 export default function IdeaInput({ onSubmit, isLoading }: Props) {
   const [idea, setIdea] = useState("");
-  const [mode, setMode] = useState("hackathon");
   const [enabledSteps, setEnabledSteps] = useState<number[]>([1, 2, 3, 4, 5]);
 
   const toggleStep = (step: number) => {
@@ -45,7 +39,7 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!idea.trim() || isLoading || enabledSteps.length === 0) return;
-    onSubmit(idea.trim(), mode, enabledSteps);
+    onSubmit(idea.trim(), enabledSteps);
   };
 
   return (
@@ -75,31 +69,6 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
             {ex}
           </button>
         ))}
-      </div>
-
-      {/* Mode selector */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-3">
-        {MODES.map((m) => {
-          const Icon = m.icon;
-          return (
-            <button
-              key={m.value}
-              type="button"
-              onClick={() => setMode(m.value)}
-              className={`flex items-center gap-1.5 sm:gap-2 rounded-xl border px-2.5 sm:px-4 py-3 text-sm transition-all ${
-                mode === m.value
-                  ? "border-brand/40 bg-brand/5 text-brand shadow-sm"
-                  : "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50"
-              }`}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              <div className="text-left min-w-0">
-                <div className="font-semibold truncate">{m.label}</div>
-                <div className="text-xs opacity-70 truncate hidden sm:block">{m.desc}</div>
-              </div>
-            </button>
-          );
-        })}
       </div>
 
       {/* Step selector */}

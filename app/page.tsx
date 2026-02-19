@@ -1,22 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { RotateCcw, Zap, Coffee } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import Header from "./components/Header";
 import IdeaInput from "./components/IdeaInput";
 import StepCard from "./components/StepCard";
 import ChatPanel from "./components/ChatPanel";
 import { useAnalysis } from "./useAnalysis";
 
-const MODE_LABELS: Record<string, { label: string; icon: typeof Zap }> = {
-  hackathon: { label: "해커톤", icon: Zap },
-  sideproject: { label: "사이드 프로젝트", icon: Coffee },
-};
-
 export default function Page() {
   const { steps, isAnalyzing, error, analyze, reset } = useAnalysis();
   const [currentIdea, setCurrentIdea] = useState("");
-  const [currentMode, setCurrentMode] = useState("");
   const [enabledSteps, setEnabledSteps] = useState<number[]>([1, 2, 3, 4, 5]);
 
   const hasResults = steps.length > 0;
@@ -24,21 +18,17 @@ export default function Page() {
   const progress = enabledSteps.length > 0 ? (completedSteps / enabledSteps.length) * 100 : 0;
   const allDone = completedSteps === enabledSteps.length && enabledSteps.length > 0;
 
-  const handleAnalyze = (idea: string, mode: string, stepsToRun: number[]) => {
+  const handleAnalyze = (idea: string, stepsToRun: number[]) => {
     setEnabledSteps(stepsToRun);
     setCurrentIdea(idea);
-    setCurrentMode(mode);
-    analyze(idea, mode, stepsToRun);
+    analyze(idea, stepsToRun);
   };
 
   const handleReset = () => {
     setCurrentIdea("");
-    setCurrentMode("");
     setEnabledSteps([1, 2, 3, 4, 5]);
     reset();
   };
-
-  const modeInfo = MODE_LABELS[currentMode];
 
   return (
     <div className="min-h-screen">
@@ -54,7 +44,7 @@ export default function Page() {
             <p className="text-rose-600 font-medium">{error}</p>
             {currentIdea && (
               <button
-                onClick={() => handleAnalyze(currentIdea, currentMode || "hackathon", enabledSteps)}
+                onClick={() => handleAnalyze(currentIdea, enabledSteps)}
                 className="mt-3 inline-flex items-center gap-2 rounded-lg border border-rose-200 px-4 py-2 text-sm text-rose-600 transition-colors hover:bg-rose-100"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
@@ -74,12 +64,6 @@ export default function Page() {
                   <p className="text-lg font-semibold text-slate-800 leading-snug">
                     &ldquo;{currentIdea}&rdquo;
                   </p>
-                  {modeInfo && (
-                    <div className="mt-1 flex items-center gap-1.5 text-sm text-slate-500">
-                      <modeInfo.icon className="h-3.5 w-3.5" />
-                      <span>{modeInfo.label} 모드</span>
-                    </div>
-                  )}
                 </div>
                 <button
                   onClick={handleReset}
@@ -117,10 +101,7 @@ export default function Page() {
                 onReanalyze={(newIdea) => {
                   const stepsToRun = enabledSteps;
                   handleReset();
-                  setTimeout(
-                    () => handleAnalyze(newIdea, currentMode || "hackathon", stepsToRun),
-                    100
-                  );
+                  setTimeout(() => handleAnalyze(newIdea, stepsToRun), 100);
                 }}
               />
             ))}

@@ -3,24 +3,20 @@ import { IdeaAnalyzer } from "./analyzer";
 
 export async function POST(request: NextRequest) {
   // 1. Parse and validate request body
-  let body: { idea?: string; mode?: string; enabledSteps?: number[] };
+  let body: { idea?: string; enabledSteps?: number[] };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { idea, mode, enabledSteps = [1, 2, 3, 4, 5] } = body;
+  const { idea, enabledSteps = [1, 2, 3, 4, 5] } = body;
 
   if (!idea || typeof idea !== "string" || idea.trim().length === 0) {
     return NextResponse.json({ error: "idea is required" }, { status: 400 });
   }
   if (idea.length > 500) {
     return NextResponse.json({ error: "idea must be 500 characters or less" }, { status: 400 });
-  }
-  const validModes = ["hackathon", "sideproject"];
-  if (!mode || !validModes.includes(mode)) {
-    return NextResponse.json({ error: `mode must be one of: ${validModes.join(", ")}` }, { status: 400 });
   }
   const validSteps = [1, 2, 3, 4, 5];
   const sanitizedSteps = Array.isArray(enabledSteps)
@@ -40,7 +36,7 @@ export async function POST(request: NextRequest) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        for await (const event of analyzer.analyze(idea.trim(), mode, finalSteps)) {
+        for await (const event of analyzer.analyze(idea.trim(), finalSteps)) {
           const line = `data: ${JSON.stringify(event.data)}\n\n`;
           controller.enqueue(encoder.encode(line));
         }

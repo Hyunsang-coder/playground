@@ -50,7 +50,6 @@ export class IdeaAnalyzer {
 
   async *analyze(
     idea: string,
-    mode: string,
     enabledSteps: number[] = [1, 2, 3, 4, 5]
   ): AsyncGenerator<SSEEvent> {
     const activeSteps = enabledSteps.length > 0 ? enabledSteps : [1, 2, 3, 4, 5];
@@ -122,7 +121,6 @@ export class IdeaAnalyzer {
 
       for await (const event of this.streamFeasibility(
         idea,
-        mode,
         competitors,
         githubResults,
         dataAvailability
@@ -174,7 +172,6 @@ export class IdeaAnalyzer {
       let verdict = fallbackVerdict(feasibility, differentiation);
       for await (const event of this.streamVerdict(
         idea,
-        mode,
         competitors,
         githubResults,
         feasibility,
@@ -612,13 +609,12 @@ export class IdeaAnalyzer {
 
   private async *streamFeasibility(
     idea: string,
-    mode: string,
     competitors: WebSearchResult,
     githubResults: GitHubSearchResult,
     dataAvailability: DataAvailabilityResult
   ): AsyncGenerator<ClaudeStreamEvent> {
     const fallback = fallbackFeasibility();
-    const prompt = buildFeasibilityPrompt(idea, mode, competitors, githubResults, dataAvailability);
+    const prompt = buildFeasibilityPrompt(idea, competitors, githubResults, dataAvailability);
 
     for await (const event of this.callClaudeStream(prompt, fallback as unknown as Record<string, unknown>)) {
       if (event.type === "result") {
@@ -641,7 +637,6 @@ export class IdeaAnalyzer {
 
   private async *streamVerdict(
     idea: string,
-    mode: string,
     competitors: WebSearchResult,
     githubResults: GitHubSearchResult,
     feasibility: FeasibilityResult,
@@ -651,7 +646,6 @@ export class IdeaAnalyzer {
     const fallback = fallbackVerdict(feasibility, differentiation);
     const prompt = buildVerdictPrompt(
       idea,
-      mode,
       competitors,
       githubResults,
       feasibility,

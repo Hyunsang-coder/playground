@@ -152,15 +152,10 @@ ${evidenceText}
 
 export function buildFeasibilityPrompt(
   idea: string,
-  mode: string,
   competitors: WebSearchResult,
   githubResults: GitHubSearchResult,
   dataAvailability?: DataAvailabilityResult
 ): string {
-  const modeContext: Record<string, string> = {
-    hackathon: "5시간 이내, 1인 개발자, 바이브코딩 환경",
-    sideproject: "주말 개발, 1~2인, 배포까지 목표",
-  };
   const { webRelevantCount, githubRelevantCount, githubBroadCount } = getSignalCounts(
     competitors,
     githubResults
@@ -198,7 +193,7 @@ export function buildFeasibilityPrompt(
 
 ${dataSection}
 아이디어: ${idea}
-개발 환경: ${modeContext[mode] || modeContext.hackathon}
+개발 환경: 제한된 시간의 1인 바이브코딩
 
 웹 유의미 경쟁 후보 수(필터 통과): ${webRelevantCount}개
 GitHub 유의미 유사 저장소 수(필터 통과): ${githubRelevantCount}개
@@ -220,7 +215,7 @@ GitHub 전체 검색 모수(참고): ${githubBroadCount}개
    - 실시간 데이터 필요 여부
    - 유료 API 의존 여부
 
-4. 해커톤/사이드 프로젝트 맥락에서의 실현 가능성 총평
+4. 단기 개발 사이클(수시간~주말) 맥락에서의 실현 가능성 총평
 5. 반드시 "유의미 후보 수(웹/GitHub 필터 통과)"를 핵심 근거로 사용하고, "전체 검색 모수"는 보조 참고치로만 반영
 
 반드시 순수 JSON으로만 응답하세요:
@@ -308,7 +303,6 @@ ${githubList}
 
 export function buildVerdictPrompt(
   idea: string,
-  mode: string,
   competitors: WebSearchResult,
   githubResults: GitHubSearchResult,
   feasibility: FeasibilityResult,
@@ -324,10 +318,9 @@ export function buildVerdictPrompt(
     ? `\n데이터/API 가용성:\n- has_blocking_issues: ${String(dataAvailability.has_blocking_issues)}\n- data_sources: ${JSON.stringify(dataAvailability.data_sources)}\n- libraries: ${JSON.stringify(dataAvailability.libraries)}`
     : "";
 
-  return `당신은 해커톤/사이드 프로젝트 아이디어 심판관입니다. 혼자 만드는 개발자 관점에서 모든 분석 결과를 종합하여 최종 판정을 내리세요.
+  return `당신은 단기 개발 아이디어 심판관입니다. 혼자 만드는 개발자 관점에서 모든 분석 결과를 종합하여 최종 판정을 내리세요.
 
 아이디어: ${idea}
-모드: ${mode}
 
 경쟁 현황:
 - 웹 유의미 경쟁 후보: ${webRelevantCount}개

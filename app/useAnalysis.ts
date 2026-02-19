@@ -8,7 +8,7 @@ export function useAnalysis() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const analyze = useCallback(async (idea: string, mode: string, enabledSteps: number[] = [1, 2, 3, 4, 5]) => {
+  const analyze = useCallback(async (idea: string, enabledSteps: number[] = [1, 2, 3, 4, 5]) => {
     setSteps([]);
     setIsAnalyzing(true);
     setError(null);
@@ -17,7 +17,7 @@ export function useAnalysis() {
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idea, mode, enabledSteps }),
+        body: JSON.stringify({ idea, enabledSteps }),
       });
 
       if (!response.ok) {

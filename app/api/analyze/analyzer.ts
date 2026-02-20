@@ -293,7 +293,7 @@ export class IdeaAnalyzer {
         if (refinedQueries.length > 0) {
           const rq1 = refinedQueries[0] || query1;
           const rq2 = refinedQueries[1] || query2;
-          const retryCompetitors = await this.doWebSearchParallel(rq1, rq2, "advanced");
+          const retryCompetitors = await this.doWebSearchParallel(rq1, rq2, "basic");
           const existingUrls = new Set(competitors.map((c) => c.url));
           for (const c of retryCompetitors) {
             if (!existingUrls.has(c.url)) {
@@ -918,18 +918,17 @@ export class IdeaAnalyzer {
       for (const src of parsedSources) {
         const custom = src.search_queries.slice(0, 3);
         const queriesForSource = custom.length >= 2
-          ? custom
+          ? custom.slice(0, 2)
           : [
             `${src.name} official API documentation`,
             `${src.name} developer portal`,
-            `${src.name} scraping terms of service`,
           ];
         sourceQueriesByName.set(src.name, queriesForSource);
         sourceQueries.push(...queriesForSource);
       }
 
       const uniqueQueries = Array.from(new Set(sourceQueries));
-      const evidenceMap = await this.doDataAvailabilitySearch(uniqueQueries, 9);
+      const evidenceMap = await this.doDataAvailabilitySearch(uniqueQueries, 6);
 
       // Single high-accuracy LLM validation + URL Check
       const [claudeJudgment, libraryResult] = await Promise.all([

@@ -15,10 +15,10 @@ const STEPS = [
 ];
 
 const EXAMPLES = [
-  "AI 기반 뉴스 팩트체커",
+  "마크다운 기반의 이력서 생성기 웹앱",
+  "GitHub PR을 자동으로 리뷰해주는 봇",
+  "우주 쓰레기 궤도 통합 분석 시뮬레이터",
   "Claude Code 세션 간 컨텍스트 자동 유지 도구",
-  "해커톤 아이디어 검증기",
-  "AI 코드 리뷰 자동화 도구",
 ];
 
 export default function IdeaInput({ onSubmit, isLoading }: Props) {
@@ -92,8 +92,8 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
                 type="button"
                 onClick={() => toggleStep(item.step)}
                 className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all ${checked
-                    ? "border-brand/40 bg-brand/5 text-brand"
-                    : "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50"
+                  ? "border-brand/40 bg-brand/5 text-brand"
+                  : "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50"
                   }`}
               >
                 {checked ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
@@ -120,7 +120,7 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
         className="flex w-full items-center justify-center gap-3 rounded-2xl bg-brand px-6 sm:px-8 py-3.5 sm:py-4 text-lg sm:text-xl font-bold text-white shadow-lg shadow-brand/20 transition-all hover:bg-indigo-600 hover:shadow-xl hover:shadow-brand/25 disabled:opacity-40 disabled:shadow-none disabled:hover:bg-brand"
       >
         <Search className="h-6 w-6" />
-        {isLoading ? "분석 중..." : "이 아이디어를 검증하기"}
+        {isLoading ? "분석 중..." : "바이브코딩(AI)으로 당장 구현 가능한가요?"}
       </button>
     </form>
   );

@@ -7,6 +7,7 @@ import type {
   FeasibilityResult,
   DifferentiationResult,
   DataAvailabilityResult,
+  Bottleneck,
 } from "./utils";
 
 function getSignalCounts(competitors: WebSearchResult, githubResults: GitHubSearchResult) {
@@ -217,6 +218,11 @@ ${dataSection}
 
 4. 단기 개발 사이클(수시간~주말) 맥락에서의 실현 가능성 총평
 
+score 산정 기준 (반드시 준수):
+- high severity 병목이 아이디어의 핵심 기능에 직결되는 경우: score ≤ 60
+- high severity 병목이 2개 이상인 경우: score ≤ 50
+- high severity 병목이 없는 경우: score는 다른 요소로 자유롭게 산정
+
 반드시 순수 JSON으로만 응답하세요:
 
 {
@@ -334,11 +340,23 @@ export function buildVerdictPrompt(
     })()
     : "경쟁 현황: (미선택)";
 
+  const highSeverityBottlenecks = feasibility
+    ? (feasibility.bottlenecks || []).filter(
+        (b): b is Bottleneck =>
+          typeof b === "object" && b !== null && (b as Bottleneck).severity === "high"
+      )
+    : [];
+
   const feasibilitySection = feasibility
     ? `기술 실현성:
 - 점수: ${feasibility.score ?? 50}/100
 - 판정: ${feasibility.overall_feasibility || "unknown"}
-- 핵심 리스크: ${JSON.stringify(feasibility.key_risks || [])}`
+- 핵심 리스크: ${JSON.stringify(feasibility.key_risks || [])}
+- high severity 병목 (${highSeverityBottlenecks.length}개): ${
+        highSeverityBottlenecks.length > 0
+          ? highSeverityBottlenecks.map((b) => `[${b.type}] ${b.description}`).join(" / ")
+          : "없음"
+      }`
     : "기술 실현성: (미선택)";
 
   const differentiationSection = differentiation
@@ -388,7 +406,8 @@ ${dataSummary}
 - recommendation은 1~2문장으로 핵심만 간결하게 작성하세요.
 - alternative_ideas는 각 항목을 10자 이내의 짧은 키워드/제목으로 작성하세요.
 - has_blocking_issues=true이면 verdict는 PIVOT 또는 KILL을 우선 고려하세요.
-- has_blocking_issues=true일 때 alternative_ideas에는 공식 API가 있는 대안을 포함하세요.`;
+- has_blocking_issues=true일 때 alternative_ideas에는 공식 API가 있는 대안을 포함하세요.
+- [HIGH SEVERITY 병목 규칙]: '기술 실현성'의 high severity 병목이 1개 이상이고 그 병목이 아이디어의 핵심 기능에 직결된다면, GO 판정을 내리지 마세요. 핵심 기능이 구현 가능한지 먼저 검증해야 하므로 PIVOT을 우선 고려하세요. high severity 병목이 2개 이상이면 confidence를 60 이하로 제한하세요.`;
 }
 
 export function buildDataVerificationPrompt(

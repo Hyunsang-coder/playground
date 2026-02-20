@@ -1,12 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search, CheckSquare, Square } from "lucide-react";
-
-interface Props {
-  onSubmit: (idea: string, enabledSteps: number[]) => void;
-  isLoading: boolean;
-}
+import { Search } from "lucide-react";
 
 interface Props {
   onSubmit: (idea: string, enabledSteps: number[]) => void;
@@ -65,9 +60,6 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
           </button>
         ))}
       </div>
-
-
-
       {/* Submit button */}
       <button
         type="submit"

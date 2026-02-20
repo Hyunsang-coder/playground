@@ -8,7 +8,7 @@ export function useAnalysis() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const analyze = useCallback(async (idea: string, enabledSteps: number[] = [1, 2, 3, 4, 5]) => {
+  const analyze = useCallback(async (idea: string, enabledSteps: number[] = [1, 2, 3]) => {
     setSteps([]);
     setIsAnalyzing(true);
     setError(null);

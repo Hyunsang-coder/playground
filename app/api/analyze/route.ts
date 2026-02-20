@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { IdeaAnalyzer } from "./analyzer";
 
 export async function POST(request: NextRequest) {
+  const supportedSteps = [1, 2, 3] as const;
+
   // 1. Parse and validate request body
   let body: { idea?: string; enabledSteps?: number[] };
   try {
@@ -10,7 +12,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { idea, enabledSteps = [1, 2, 3, 4, 5] } = body;
+  const { idea, enabledSteps = [...supportedSteps] } = body;
 
   if (!idea || typeof idea !== "string" || idea.trim().length === 0) {
     return NextResponse.json({ error: "idea is required" }, { status: 400 });
@@ -18,18 +20,18 @@ export async function POST(request: NextRequest) {
   if (idea.length > 500) {
     return NextResponse.json({ error: "idea must be 500 characters or less" }, { status: 400 });
   }
-  const validSteps = [1, 2, 3, 4, 5];
+  const validSteps = [...supportedSteps];
   const sanitizedSteps = Array.isArray(enabledSteps)
-    ? enabledSteps.filter((s): s is number => validSteps.includes(s))
+    ? enabledSteps.filter((s): s is number => Number.isInteger(s) && validSteps.includes(s as (typeof supportedSteps)[number]))
     : validSteps;
-  const finalSteps = sanitizedSteps.length > 0 ? sanitizedSteps : validSteps;
-  const isStep5Only = finalSteps.length === 1 && finalSteps[0] === 5;
-  if (isStep5Only) {
+  const uniqueSteps = Array.from(new Set(sanitizedSteps));
+  if (Array.isArray(enabledSteps) && enabledSteps.length > 0 && uniqueSteps.length === 0) {
     return NextResponse.json(
-      { error: "step 5 cannot run alone. Select at least one of steps 1-4 with step 5." },
+      { error: "enabledSteps must include one or more of: 1, 2, 3" },
       { status: 400 }
     );
   }
+  const finalSteps = uniqueSteps.length > 0 ? uniqueSteps : validSteps;
 
   // 2. Create analyzer with env-based API keys
   const analyzer = new IdeaAnalyzer(

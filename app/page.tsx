@@ -93,7 +93,7 @@ export default function Page() {
                         &ldquo;{currentIdea}&rdquo;
                       </p>
                       {isAnalyzing && (
-                        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-indigo-50 border border-brand/20 px-2.5 py-1 text-xs font-semibold text-brand shadow-sm">
+                        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-brand/5 border border-brand/20 px-2.5 py-1 text-xs font-semibold text-brand shadow-sm">
                           <span className="relative flex h-2 w-2">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-brand"></span>
@@ -182,7 +182,7 @@ export default function Page() {
             {isAnalyzing && steps.length === 0 && (
               <div className="step-card animate-slide-up">
                 <div className="mb-4 flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-brand">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/8 text-brand">
                     <Loader2 className="h-5 w-5 animate-spin" />
                   </div>
                   <div>

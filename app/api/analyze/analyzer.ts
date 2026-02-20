@@ -1,4 +1,4 @@
-// IdeaAnalyzer class — 5-step analysis pipeline, ported from backend/analyzer.py
+// IdeaAnalyzer class — 3-step analysis pipeline, ported from backend/analyzer.py
 // Uses Vercel AI SDK (@ai-sdk/anthropic + ai) instead of anthropic Python SDK
 
 import { generateText, streamText } from "ai";
@@ -11,7 +11,6 @@ import {
   fallbackDataAvailability,
   cacheGet,
   cacheSet,
-  sleep,
   type SSEEvent,
   type Competitor,
   type WebSearchResult,
@@ -30,7 +29,6 @@ import {
   buildFeasibilityPrompt,
   buildDifferentiationPrompt,
   buildVerdictPrompt,
-  buildDataVerificationPrompt,
 } from "./prompts";
 import {
   selectNpmCandidate,
@@ -55,6 +53,7 @@ type NpmSearchResponse = {
   }>;
 };
 type RobotsCheckResult = { disallowAll: boolean; domain?: string };
+type TokenUsageMetrics = { promptTokens?: number; completionTokens?: number };
 
 export class IdeaAnalyzer {
   private readonly dataAvailabilityCacheTtlMs = 1_800_000; // 30 minutes
@@ -73,6 +72,17 @@ export class IdeaAnalyzer {
 
   private normalizeQuery(query: string): string {
     return query.toLowerCase().replace(/\s+/g, " ").trim();
+  }
+
+  private formatTokenUsage(usage: unknown): { prompt: number | string; completion: number | string } {
+    if (!usage || typeof usage !== "object") {
+      return { prompt: "N/A", completion: "N/A" };
+    }
+    const metrics = usage as TokenUsageMetrics;
+    return {
+      prompt: typeof metrics.promptTokens === "number" ? metrics.promptTokens : "N/A",
+      completion: typeof metrics.completionTokens === "number" ? metrics.completionTokens : "N/A",
+    };
   }
 
   private buildCacheKey(prefix: string, ...parts: string[]): string {
@@ -658,31 +668,6 @@ export class IdeaAnalyzer {
     return new Map(results);
   }
 
-  private mergeEvidenceByQueries(
-    evidenceMap: Map<string, SearchEvidence>,
-    queries: string[]
-  ): SearchEvidence {
-    const urls = new Set<string>();
-    const snippets = new Set<string>();
-
-    for (const query of queries) {
-      const evidence = evidenceMap.get(query);
-      if (!evidence) continue;
-
-      for (const url of evidence.urls) {
-        if (url) urls.add(url);
-      }
-      for (const snippet of evidence.snippets) {
-        if (snippet) snippets.add(snippet);
-      }
-    }
-
-    return {
-      urls: Array.from(urls).slice(0, 8),
-      snippets: Array.from(snippets).slice(0, 8),
-    };
-  }
-
   private isRobotsDisallowAll(content: string): boolean {
     const lines = content
       .split(/\r?\n/)
@@ -897,7 +882,8 @@ export class IdeaAnalyzer {
         messages: [{ role: "user", content: prompt }],
       });
 
-      console.log(`[Token Usage: getClaudeDataJudgment] IN: ${(usage as any).promptTokens} | OUT: ${(usage as any).completionTokens}`);
+      const usageMetrics = this.formatTokenUsage(usage);
+      console.log(`[Token Usage: getClaudeDataJudgment] IN: ${usageMetrics.prompt} | OUT: ${usageMetrics.completion}`);
 
       const parsed = parseJsonSafe<Partial<DataAvailabilityResult>>(text.trim(), {});
       if (!parsed || !Array.isArray(parsed.data_sources)) return null;
@@ -1085,7 +1071,8 @@ export class IdeaAnalyzer {
 
       const finalUsage = await usage;
       if (finalUsage) {
-        console.log(`[Token Usage: Stream] IN: ${(finalUsage as any).promptTokens} | OUT: ${(finalUsage as any).completionTokens}`);
+        const usageMetrics = this.formatTokenUsage(finalUsage);
+        console.log(`[Token Usage: Stream] IN: ${usageMetrics.prompt} | OUT: ${usageMetrics.completion}`);
       }
 
       const parsed = parseJsonSafe(collectedText.trim(), fallback);

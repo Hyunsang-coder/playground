@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, type CSSProperties } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { Send, MessageCircle, Sparkles } from "lucide-react";
@@ -62,14 +62,22 @@ export default function ChatPanel({ analysisResults, idea }: Props) {
   };
 
   return (
-    <div className="mt-8 rounded-2xl border border-violet-200 bg-white p-6 shadow-sm animate-fade-in">
+    <div
+      className="mt-8 rounded-2xl border bg-white p-6 shadow-sm animate-fade-in"
+      style={{ borderColor: "var(--brand-ring)" }}
+    >
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-500">
+        <div
+          className="flex h-10 w-10 items-center justify-center rounded-xl"
+          style={{ backgroundColor: "var(--brand-light)", color: "var(--brand)" }}
+        >
           <MessageCircle className="h-5 w-5" />
         </div>
         <div>
-          <h3 className="font-bold text-lg text-violet-700">AI 후속 상담</h3>
+          <h3 className="font-bold text-lg" style={{ color: "var(--brand)" }}>
+            AI 후속 상담
+          </h3>
           <p className="text-sm text-slate-500">분석 결과를 바탕으로 추가 질문하세요</p>
         </div>
       </div>
@@ -81,7 +89,12 @@ export default function ChatPanel({ analysisResults, idea }: Props) {
             <button
               key={q}
               onClick={() => handleSuggestedClick(q)}
-              className="flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm text-violet-600 transition-all hover:border-violet-300 hover:bg-violet-100 hover:shadow-sm"
+              className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-all hover:opacity-90 hover:shadow-sm"
+              style={{
+                borderColor: "var(--brand-ring)",
+                backgroundColor: "var(--brand-light)",
+                color: "var(--brand)",
+              }}
             >
               <Sparkles className="h-3 w-3" />
               {q}
@@ -98,9 +111,18 @@ export default function ChatPanel({ analysisResults, idea }: Props) {
               key={m.id}
               className={`rounded-xl p-3 text-sm ${
                 m.role === "user"
-                  ? "ml-8 bg-violet-50 text-violet-800 border border-violet-100"
+                  ? "ml-8 border"
                   : "mr-8 bg-slate-50 text-slate-700 border border-slate-100"
               }`}
+              style={
+                m.role === "user"
+                  ? {
+                      backgroundColor: "var(--brand-light)",
+                      color: "var(--brand-hover)",
+                      borderColor: "var(--brand-ring)",
+                    }
+                  : undefined
+              }
             >
               <div className="mb-1 text-xs font-semibold text-slate-400">
                 {m.role === "user" ? "나" : "Valid8 AI"}
@@ -129,13 +151,20 @@ export default function ChatPanel({ analysisResults, idea }: Props) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="분석 결과에 대해 질문하세요..."
-          className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-violet-300 focus:ring-2 focus:ring-violet-100"
+          className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all focus:ring-2"
+          style={
+            {
+              "--tw-ring-color": "var(--brand-ring)",
+              borderColor: "var(--brand-ring)",
+            } as CSSProperties
+          }
           disabled={isLoading}
         />
         <button
           type="submit"
           disabled={!input.trim() || isLoading}
-          className="flex items-center justify-center rounded-xl bg-violet-500 px-4 py-2.5 text-white shadow-sm transition-all hover:bg-violet-600 hover:shadow disabled:opacity-40"
+          className="flex items-center justify-center rounded-xl px-4 py-2.5 text-white shadow-sm transition-all hover:opacity-90 hover:shadow disabled:opacity-40"
+          style={{ backgroundColor: "var(--brand)" }}
         >
           <Send className="h-4 w-4" />
         </button>

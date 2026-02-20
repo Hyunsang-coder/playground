@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Loader2, Circle, Globe, Github, Brain, Swords, Gavel } from "lucide-react";
+import { CheckCircle2, Loader2, Circle, Globe, Brain, Gavel } from "lucide-react";
 import type {
   AnalysisStep,
   MarketAndDifferentiationResult,
@@ -35,8 +35,6 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function StepCard({ step, idea, onReanalyze }: Props) {
-  const result = step.result;
-
   return (
     <div className="step-card animate-slide-up">
       {/* Header */}
@@ -45,7 +43,7 @@ export default function StepCard({ step, idea, onReanalyze }: Props) {
           className={`flex h-10 w-10 items-center justify-center rounded-xl ${step.status === "done"
               ? "bg-emerald-50 text-go"
               : step.status === "loading"
-                ? "bg-indigo-50 text-brand"
+                ? "bg-brand/8 text-brand"
                 : "bg-slate-100 text-slate-400"
             }`}
         >

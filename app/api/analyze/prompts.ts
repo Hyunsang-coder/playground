@@ -26,13 +26,16 @@ export function buildSearchQueriesPrompt(idea: string): string {
 
 {
   "web_queries": ["영어 웹 검색 쿼리 1", "영어 웹 검색 쿼리 2"],
-  "github_query": "GitHub 검색에 최적화된 영어 키워드 (공백 구분)"
+  "github_queries": ["GitHub 검색 쿼리 1 (핵심 기능 중심)", "GitHub 검색 쿼리 2 (상위 카테고리/대안 키워드)"]
 }
 
 규칙:
 - web_queries: 정확히 2개의 영어 검색 쿼리. 첫 번째는 일반 검색, 두 번째는 경쟁 제품 검색
-- github_query: GitHub 저장소 검색에 적합한 영어 키워드 (2~4단어)
-- 핵심 기술과 도메인을 반영할 것`;
+- github_queries: 정확히 2개. 첫 번째는 핵심 기능을 직접 표현하는 2~4단어 키워드, 두 번째는 더 넓은 카테고리나 유사 도메인 키워드
+  - 예시 (아이디어: "쿠팡 리뷰 분석기"): ["coupang review analyzer", "ecommerce review sentiment"]
+  - 예시 (아이디어: "AI 코드 리뷰 봇"): ["ai code review bot", "automated code review github"]
+- 핵심 기술과 도메인을 반영할 것
+- 한국어 아이디어는 반드시 영어로 번역하여 검색 쿼리 생성`;
 }
 
 export function buildRefineSearchQueriesPrompt(idea: string, currentResults: { title: string }[]): string {

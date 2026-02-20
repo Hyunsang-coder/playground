@@ -119,7 +119,7 @@ export class IdeaAnalyzer {
 
     const searchQueries = runStep1
       ? await this.generateSearchQueries(idea)
-      : { web_queries: [idea], github_query: idea };
+      : { web_queries: [idea], github_queries: [idea] };
 
     // --- Step 1: Market Research & Differentiation (Web + GitHub) ---
     let competitors: WebSearchResult = {
@@ -136,14 +136,14 @@ export class IdeaAnalyzer {
 
     if (runStep1) {
       const webQueriesDisplay = (searchQueries.web_queries || [idea]).slice(0, 2).join(" / ");
-      const ghQueryDisplay = searchQueries.github_query || idea;
+      const ghQueriesDisplay = (searchQueries.github_queries || [idea]).slice(0, 2).join(" / ");
 
       yield {
         event: "step_start",
         data: {
           step: 1,
           title: "시장 및 차별화 분석",
-          description: `웹(${webQueriesDisplay}) & GitHub(${ghQueryDisplay}) 탐색 중...`,
+          description: `웹(${webQueriesDisplay}) & GitHub(${ghQueriesDisplay}) 탐색 중...`,
         },
       };
 
@@ -152,7 +152,7 @@ export class IdeaAnalyzer {
       // Run searches in parallel
       const [webResult, ghResult] = await Promise.all([
         this.searchWeb(idea, searchQueries.web_queries || []),
-        this.searchGithub(idea, searchQueries.github_query || "")
+        this.searchGithub(idea, searchQueries.github_queries || []),
       ]);
 
       competitors = webResult;
@@ -247,8 +247,11 @@ export class IdeaAnalyzer {
 
   // --- Pre-step: Generate search queries ---
 
-  private async generateSearchQueries(idea: string): Promise<{ web_queries: string[]; github_query: string }> {
-    const fallback = { web_queries: [`${idea} tool service app`, `${idea} alternative competitor`], github_query: idea };
+  private async generateSearchQueries(idea: string): Promise<{ web_queries: string[]; github_queries: string[] }> {
+    const fallback = {
+      web_queries: [`${idea} tool service app`, `${idea} alternative competitor`],
+      github_queries: [idea],
+    };
     if (!this.anthropicApiKey) return fallback;
 
     try {
@@ -257,9 +260,13 @@ export class IdeaAnalyzer {
         maxOutputTokens: 256,
         messages: [{ role: "user", content: buildSearchQueriesPrompt(idea) }],
       });
-      const result = parseJsonSafe<{ web_queries?: string[]; github_query?: string }>(text.trim(), {});
-      if (result.web_queries && result.github_query) {
-        return result as { web_queries: string[]; github_query: string };
+      const result = parseJsonSafe<{ web_queries?: string[]; github_queries?: string[]; github_query?: string }>(text.trim(), {});
+      if (result.web_queries && (result.github_queries || result.github_query)) {
+        return {
+          web_queries: result.web_queries,
+          // 구형 응답(github_query 단수)도 수용
+          github_queries: result.github_queries ?? (result.github_query ? [result.github_query] : [idea]),
+        };
       }
     } catch {
       // fall through
@@ -502,52 +509,98 @@ export class IdeaAnalyzer {
     }
   }
 
-  // --- Step 2: GitHub search ---
+  // --- Step 1: GitHub search ---
 
-  private async searchGithub(idea: string, aiQuery: string): Promise<GitHubSearchResult> {
-    const baseQuery = (aiQuery || idea).trim().replace(/\s+/g, " ");
+  private async searchGithub(idea: string, aiQueries: string[]): Promise<GitHubSearchResult> {
+    const primaryQuery = (aiQueries[0] || idea).trim().replace(/\s+/g, " ");
+    const secondaryQuery = (aiQueries[1] || "").trim().replace(/\s+/g, " ");
+
+    const cacheKey = this.buildCacheKey("github", primaryQuery, secondaryQuery);
+    const cached = cacheGet<GitHubSearchResult>(cacheKey);
+    if (cached) return cached;
+
+    const headers: Record<string, string> = { Accept: "application/vnd.github.v3+json" };
+    if (this.githubToken) {
+      headers.Authorization = `token ${this.githubToken}`;
+    }
+
     const twoYearsAgo = new Date();
     twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
     const pushedAfter = twoYearsAgo.toISOString().slice(0, 10);
-    const githubQuery = `${baseQuery} stars:>=50 pushed:>=${pushedAfter} archived:false`;
-    const encodedQuery = encodeURIComponent(githubQuery);
 
-    const cached = cacheGet<GitHubSearchResult>(this.buildCacheKey("github", githubQuery));
-    if (cached) return cached;
+    // 단계적으로 조건을 완화하며 최대한 결과를 확보하는 검색 전략
+    const searchPlans: Array<{ query: string; minStars: number; withDateFilter: boolean }> = [
+      // 1차: 기본 쿼리, 엄격한 조건
+      { query: primaryQuery, minStars: 50, withDateFilter: true },
+      // 2차: 기본 쿼리, 날짜 조건 제거 (오래된 프로젝트도 포함)
+      { query: primaryQuery, minStars: 10, withDateFilter: false },
+      // 3차: 보조 쿼리 (더 넓은 카테고리), 관대한 조건
+      ...(secondaryQuery ? [{ query: secondaryQuery, minStars: 10, withDateFilter: false }] : []),
+    ];
+
+    const seenRepos = new Set<string>();
+    const collectedRepos: GitHubRepo[] = [];
+    let totalCount = 0;
 
     try {
-      const headers: Record<string, string> = { Accept: "application/vnd.github.v3+json" };
-      if (this.githubToken) {
-        headers.Authorization = `token ${this.githubToken}`;
+      for (const plan of searchPlans) {
+        if (collectedRepos.length >= 5) break; // 충분히 모이면 조기 종료
+
+        const qualifiers = [
+          `stars:>=${plan.minStars}`,
+          plan.withDateFilter ? `pushed:>=${pushedAfter}` : "",
+          "archived:false",
+        ].filter(Boolean).join(" ");
+
+        const fullQuery = `${plan.query} ${qualifiers}`;
+        const encodedQuery = encodeURIComponent(fullQuery);
+
+        let resp: Response;
+        try {
+          resp = await fetch(
+            `https://api.github.com/search/repositories?q=${encodedQuery}&sort=stars&order=desc&per_page=10`,
+            { headers, signal: AbortSignal.timeout(15000) }
+          );
+        } catch {
+          continue; // 네트워크 오류는 다음 plan으로
+        }
+
+        if (!resp.ok) {
+          // 422 = 쿼리 문법 오류, 403 = rate limit — 다음 plan 시도
+          console.warn(`[GitHub search] HTTP ${resp.status} for query: ${fullQuery}`);
+          continue;
+        }
+
+        const data = await resp.json() as { items?: Record<string, unknown>[]; total_count?: number };
+        if (data.total_count && data.total_count > totalCount) totalCount = data.total_count;
+
+        for (const item of data.items || []) {
+          const url = (item.html_url as string) || "";
+          if (!url || seenRepos.has(url)) continue;
+          seenRepos.add(url);
+          collectedRepos.push({
+            name: (item.full_name as string) || "",
+            description: ((item.description as string) || "").slice(0, 200),
+            stars: (item.stargazers_count as number) || 0,
+            url,
+            language: (item.language as string) || "",
+            updated: ((item.updated_at as string) || "").slice(0, 10),
+          });
+        }
       }
 
-      const resp = await fetch(
-        `https://api.github.com/search/repositories?q=${encodedQuery}&sort=stars&order=desc&per_page=10`,
-        { headers, signal: AbortSignal.timeout(15000) }
-      );
-      const data = await resp.json();
-
-      const allRepos = (data.items || []).map((item: Record<string, unknown>) => ({
-        name: (item.full_name as string) || "",
-        description: ((item.description as string) || "").slice(0, 200),
-        stars: (item.stargazers_count as number) || 0,
-        url: (item.html_url as string) || "",
-        language: (item.language as string) || "",
-        updated: ((item.updated_at as string) || "").slice(0, 10),
-      }));
-
-      const repos = allRepos.filter(
-        (r: { stars: number; updated: string }) =>
-          r.stars >= 50 && new Date(r.updated) >= twoYearsAgo
-      );
+      // 별점 내림차순 정렬 후 상위 10개
+      const repos = collectedRepos
+        .sort((a, b) => b.stars - a.stars)
+        .slice(0, 10);
 
       const result: GitHubSearchResult = {
         repos,
-        total_count: (data.total_count as number) || 0,
-        summary: `유의미한 GitHub 저장소 ${repos.length}개를 선별했습니다 (전체 검색 모수 ${data.total_count || 0}개).`,
+        total_count: totalCount,
+        summary: `유의미한 GitHub 저장소 ${repos.length}개를 선별했습니다 (전체 검색 모수 ${totalCount}개).`,
       };
 
-      cacheSet(this.buildCacheKey("github", githubQuery), result);
+      cacheSet(cacheKey, result);
       return result;
     } catch (e) {
       return { repos: [], total_count: 0, summary: `GitHub 검색 중 오류: ${e instanceof Error ? e.message : String(e)}` };

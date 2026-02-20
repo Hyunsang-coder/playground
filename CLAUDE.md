@@ -68,8 +68,13 @@ npm install              # Install dependencies
 npm run dev              # Dev server (localhost:3000)
 npm run build            # Production build (TypeScript check + Next.js build)
 npm run start            # Start production server
-npx tsc --noEmit         # TypeScript type check only
+npm run typecheck        # TypeScript type check (next typegen + tsc --noEmit)
+npm run test             # Run unit/API tests with Vitest (once)
+npm run test:watch       # Run Vitest in watch mode
+npm run test:e2e         # Run Playwright E2E tests (requires dev server or auto-starts one)
 ```
+
+Test structure: `tests/unit/` (Vitest), `tests/api/` (Vitest), `tests/e2e/` (Playwright). E2E tests use `http://localhost:3000` and reuse an existing dev server if running.
 
 No separate backend server needed — all API routes run as Next.js Route Handlers.
 

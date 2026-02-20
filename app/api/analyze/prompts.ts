@@ -265,9 +265,9 @@ export function buildDifferentiationPrompt(
 
 사용자의 아이디어를 다음 세 가지 관점에서 무자비하게 비판하세요:
 
-1. "이미 있는데?" (Redundancy): 아래 경쟁 제품/GitHub 프로젝트를 바탕으로 기존 서비스와 겹치는 지점을 지적하세요. "그냥 기존 도구 쓰면 되는 거 아냐?"라는 질문에 답해 보세요.
-2. "이게 되겠어?" (Feasibility): 제한된 시간 내에 API 레이턴시, 데이터 수집의 한계, UI 복잡도를 고려할 때 발생할 기술적 병목 현상을 꼬집으세요.
-3. "누가 써?" (Market Fit): "이건 개발자 자기만족 아냐?" 혹은 "사용자가 굳이 이걸 쓸 이유가 없어"라는 관점에서 사용성 문제를 지적하세요.
+1. "이미 똑같은 오픈소스가 있는데?" (Redundancy): 아래 경쟁 제품/GitHub 프로젝트를 완벽히 숙지하시고, 95% 이상 일치하는 '완제품'이나 '보일러플레이트' 저장소가 존재하는지 판단하세요. 만약 존재한다면 is_exact_match_found를 true로 설정하세요. "그냥 이거 Fork 해서 쓰면 되는 거 아냐?"라는 시각으로 접근하세요.
+2. "이게 되겠어?" (Feasibility): "이건 개발자 자기만족 아냐?" 혹은 "사용자가 굳이 이걸 쓸 이유가 없어"라는 관점과 함께 제한된 리소스 내 기술적 핏을 지적하세요.
+3. "누가 써?" (Market Fit): 뾰족한 타겟팅 없이 단순 추상화된 아이디어들의 실질적 고객 유치 어려움을 지적하세요.
 
 정중하지만 뼈 때리는 말투로, 불필요한 수식어 없이 핵심 약점을 서술하세요.
 
@@ -285,7 +285,7 @@ ${githubList}
 
 중요:
 - "유의미 후보 수"를 1차 근거로 사용하세요.
-- total_count 같은 전체 모수는 과장될 수 있으므로 보조 지표로만 사용하세요.
+- is_exact_match_found 는 오직 제공된 GitHub 프로젝트 중 하나가 사용자의 아이디어를 95% 이상 그대로 커버할 때만 true입니다. 유사한 수준이면 false입니다.
 
 반드시 순수 JSON으로만 응답하세요:
 
@@ -296,6 +296,7 @@ ${githubList}
     {"name": "제품/프로젝트명", "similarity": 0-100, "weakness": "약점"}
   ],
   "unique_angles": ["차별화 포인트 1", "차별화 포인트 2"],
+  "is_exact_match_found": boolean,
   "summary": "한줄 종합 (뼈 때리는 한마디)"
 }`;
 }
@@ -344,6 +345,7 @@ export function buildVerdictPrompt(
     ? `차별화:
 - 경쟁 수준: ${differentiation.competition_level || "unknown"}
 - 경쟁 점수: ${differentiation.competition_score ?? 50}/100
+- 95% 이상 일치하는 보일러플레이트/완제품 OSS 발견 여부: ${differentiation.is_exact_match_found ? "예 (강력한 Fork/Clone 권장)" : "아니오"}
 - 차별화 포인트: ${JSON.stringify(differentiation.unique_angles || [])}`
     : "차별화: (미선택)";
 
@@ -351,7 +353,7 @@ export function buildVerdictPrompt(
     ? `\n데이터/API 가용성:\n- has_blocking_issues: ${String(dataAvailability.has_blocking_issues)}\n- data_sources: ${JSON.stringify(dataAvailability.data_sources)}\n- libraries: ${JSON.stringify(dataAvailability.libraries)}`
     : "";
 
-  return `당신은 단기 개발 아이디어 심판관입니다. 혼자 만드는 개발자 관점에서 선택된 분석 결과만 종합하여 최종 판정을 내리세요.
+  return `당신은 단기 개발 아이디어 심판관입니다. 최신 AI 코딩 어시스턴트(바이브코딩)를 활용해 1인 개발을 진행하려는 초중급 개발자 관점에서 최종 판정을 내리세요.
 
 아이디어: ${idea}
 선택된 단계: ${enabledSteps.join(", ")}
@@ -364,7 +366,7 @@ ${dataSummary}
 반드시 순수 JSON으로만 응답하세요:
 
 {
-  "verdict": "GO" | "PIVOT" | "KILL",
+  "verdict": "GO" | "PIVOT" | "KILL" | "FORK",
   "confidence": 0-100,
   "overall_score": 0-100,
   "scores": {
@@ -378,7 +380,9 @@ ${dataSummary}
   "alternative_ideas": ["대안 1 (10자 이내 키워드)", "대안 2", "대안 3"]
 }
 
-주의:
+주의 및 중요 규칙:
+- [FORK 판정]: '차별화' 섹션에 "95% 이상 일치하는 보일러플레이트/완제품 OSS 발견 여부"가 "예"로 되어있다면, 바닥부터 바이브코딩을 할 필요가 없습니다. 무조건 verdict를 "FORK" 혹은 "KILL"로 지정하고 "이 오픈소스를 Fork/Clone 해서 시작하세요"라고 강하게 권고하세요.
+- [VIBE-CODING 관점]: '기술 실현성'에서 병목 갯수, 데이터수집 한계가 높다면 AI 툴만 믿고 시작했다가 시간만 날릴 위험이 큽니다. 단기 성과를 위해 PIVOT을 제안하세요.
 - 제공되지 않은(미선택) 단계 정보는 절대 추정하지 말고 평가에서 제외하세요.
 - overall_score는 선택된 단계 근거만 반영하세요.
 - recommendation은 1~2문장으로 핵심만 간결하게 작성하세요.

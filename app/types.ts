@@ -55,6 +55,8 @@ export interface DifferentiationResult {
   competition_score: number;
   existing_solutions: ExistingSolution[];
   unique_angles: string[];
+  is_exact_match_found: boolean;
+  exact_match_repo?: GitHubRepo;
   summary: string;
 }
 
@@ -72,7 +74,7 @@ export interface VerdictScores {
 }
 
 export interface VerdictResult {
-  verdict: "GO" | "PIVOT" | "KILL";
+  verdict: "GO" | "PIVOT" | "KILL" | "FORK";
   confidence: number;
   overall_score: number;
   scores: VerdictScores;
@@ -123,7 +125,8 @@ export type BottleneckType =
   | "realtime_required"
   | "no_library"
   | "complex_algorithm"
-  | "binary_processing";
+  | "binary_processing"
+  | "existing_open_source";
 
 export interface Bottleneck {
   type: BottleneckType;

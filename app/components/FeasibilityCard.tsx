@@ -104,6 +104,13 @@ const BOTTLENECK_CONFIG: Record<
     bgColor: "bg-amber-50",
     borderColor: "border-amber-200",
   },
+  existing_open_source: {
+    icon: Package,
+    label: "동일 오픈소스 존재",
+    color: "text-blue-600",
+    bgColor: "bg-blue-50",
+    borderColor: "border-blue-200",
+  },
 };
 
 function isBottleneckObject(b: unknown): b is Bottleneck {

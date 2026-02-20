@@ -1,9 +1,7 @@
 import type {
   AnalysisStep,
-  WebSearchResult,
-  GitHubSearchResult,
+  MarketAndDifferentiationResult,
   FeasibilityResult,
-  DifferentiationResult,
   VerdictResult,
   Bottleneck,
 } from "./types";
@@ -38,11 +36,14 @@ export function exportAsMarkdown(idea: string, steps: AnalysisStep[]): string {
     if (step.step === 1) {
       lines.push(`## 1단계: ${step.title}`);
       lines.push("");
-      const data = step.result as WebSearchResult;
-      lines.push(`${data.summary} (유의미 ${data.raw_count}개)`);
+      const data = step.result as MarketAndDifferentiationResult;
+
+      // Web
+      lines.push(`### 시장 조사 (웹)`);
+      lines.push(`${data.web.summary} (유의미 ${data.web.raw_count}개)`);
       lines.push("");
-      if (data.competitors.length > 0) {
-        for (const c of data.competitors.slice(0, 5)) {
+      if (data.web.competitors.length > 0) {
+        for (const c of data.web.competitors.slice(0, 5)) {
           lines.push(`- **[${c.title}](${c.url})**`);
           lines.push(`  ${c.snippet}`);
         }
@@ -50,16 +51,13 @@ export function exportAsMarkdown(idea: string, steps: AnalysisStep[]): string {
         lines.push(`경쟁 제품을 찾지 못했습니다 — 블루오션 가능성!`);
       }
       lines.push("");
-    }
 
-    if (step.step === 2) {
-      lines.push(`## 2단계: ${step.title}`);
+      // GitHub
+      lines.push(`### 오픈소스 조사 (GitHub)`);
+      lines.push(`${data.github.summary} (유의미 ${data.github.repos.length}개)`);
       lines.push("");
-      const data = step.result as GitHubSearchResult;
-      lines.push(`${data.summary} (유의미 ${data.repos.length}개)`);
-      lines.push("");
-      if (data.repos.length > 0) {
-        for (const r of data.repos.slice(0, 5)) {
+      if (data.github.repos.length > 0) {
+        for (const r of data.github.repos.slice(0, 5)) {
           lines.push(`- **[${r.name}](${r.url})** ⭐ ${r.stars.toLocaleString()}${r.language ? ` \`${r.language}\`` : ""}`);
           lines.push(`  ${r.description || "설명 없음"}`);
         }
@@ -67,15 +65,41 @@ export function exportAsMarkdown(idea: string, steps: AnalysisStep[]): string {
         lines.push(`유사한 오픈소스 프로젝트가 없습니다!`);
       }
       lines.push("");
+
+      // Differentiation
+      lines.push(`### 차별화 분석`);
+      const levelLabel =
+        data.differentiation.competition_level === "blue_ocean" ? "🌊 블루오션" :
+          data.differentiation.competition_level === "moderate" ? "⚔️ 보통 경쟁" : "🔴 레드오션";
+      lines.push(`**경쟁 점수: ${data.differentiation.competition_score}/100** — ${levelLabel}`);
+      lines.push("");
+      lines.push(data.differentiation.summary);
+      lines.push("");
+
+      if (data.differentiation.existing_solutions.length > 0) {
+        lines.push(`#### 기존 솔루션`);
+        for (const s of data.differentiation.existing_solutions) {
+          lines.push(`- **${s.name}** (유사도 ${s.similarity}%) — ${s.weakness}`);
+        }
+        lines.push("");
+      }
+
+      if (data.differentiation.unique_angles.length > 0) {
+        lines.push(`#### 차별화 가능 포인트`);
+        for (const angle of data.differentiation.unique_angles) {
+          lines.push(`- 💡 ${angle}`);
+        }
+        lines.push("");
+      }
     }
 
-    if (step.step === 3) {
-      lines.push(`## 3단계: ${step.title}`);
+    if (step.step === 2) {
+      lines.push(`## 2단계: ${step.title}`);
       lines.push("");
       const data = step.result as FeasibilityResult;
       const feasLabel =
         data.overall_feasibility === "possible" ? "구현 가능" :
-        data.overall_feasibility === "partial" ? "부분 가능" : "구현 어려움";
+          data.overall_feasibility === "partial" ? "부분 가능" : "구현 어려움";
       lines.push(`**점수: ${data.score}/100** — ${feasLabel}`);
       lines.push("");
       lines.push(data.summary);
@@ -137,37 +161,8 @@ export function exportAsMarkdown(idea: string, steps: AnalysisStep[]): string {
       }
     }
 
-    if (step.step === 4) {
-      lines.push(`## 4단계: ${step.title}`);
-      lines.push("");
-      const data = step.result as DifferentiationResult;
-      const levelLabel =
-        data.competition_level === "blue_ocean" ? "🌊 블루오션" :
-        data.competition_level === "moderate" ? "⚔️ 보통 경쟁" : "🔴 레드오션";
-      lines.push(`**경쟁 점수: ${data.competition_score}/100** — ${levelLabel}`);
-      lines.push("");
-      lines.push(data.summary);
-      lines.push("");
-
-      if (data.existing_solutions.length > 0) {
-        lines.push(`### 기존 솔루션`);
-        for (const s of data.existing_solutions) {
-          lines.push(`- **${s.name}** (유사도 ${s.similarity}%) — ${s.weakness}`);
-        }
-        lines.push("");
-      }
-
-      if (data.unique_angles.length > 0) {
-        lines.push(`### 차별화 가능 포인트`);
-        for (const angle of data.unique_angles) {
-          lines.push(`- 💡 ${angle}`);
-        }
-        lines.push("");
-      }
-    }
-
-    if (step.step === 5) {
-      lines.push(`## 5단계: ${step.title}`);
+    if (step.step === 3) {
+      lines.push(`## 3단계: ${step.title}`);
       lines.push("");
       const data = step.result as VerdictResult;
       lines.push(`# ${verdictEmoji(data.verdict)} ${data.verdict} — ${data.overall_score}/100`);

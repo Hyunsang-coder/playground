@@ -181,10 +181,19 @@ export function fallbackVerdict(
   const fScore = feasibility.score ?? 50;
   const dScore = differentiation.competition_score ?? 50;
   const avg = Math.floor((fScore + dScore) / 2);
-  const verdict = avg >= 70 ? "GO" : avg >= 40 ? "PIVOT" : "KILL";
+
+  const highSeverityCount = (feasibility.bottlenecks || []).filter(
+    (b): b is Bottleneck => typeof b === "object" && b !== null && (b as Bottleneck).severity === "high"
+  ).length;
+
+  // high severity bottleneck이 있으면 GO 차단: PIVOT으로 강등
+  const rawVerdict = avg >= 70 ? "GO" : avg >= 40 ? "PIVOT" : "KILL";
+  const verdict = rawVerdict === "GO" && highSeverityCount >= 1 ? "PIVOT" : rawVerdict;
+  const confidence = highSeverityCount >= 2 ? Math.min(40, 60) : 40;
+
   return {
     verdict,
-    confidence: 40,
+    confidence,
     overall_score: avg,
     scores: {
       competition: dScore,

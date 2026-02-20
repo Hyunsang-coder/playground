@@ -218,9 +218,12 @@ ${dataSection}
 
 4. 단기 개발 사이클(수시간~주말) 맥락에서의 실현 가능성 총평
 
-score 산정 기준 (반드시 준수):
-- high severity 병목이 아이디어의 핵심 기능에 직결되는 경우: score ≤ 60
-- high severity 병목이 2개 이상인 경우: score ≤ 50
+score 및 overall_feasibility 산정 기준 (반드시 준수, 두 값은 반드시 일치해야 합니다):
+- score 70~100 → overall_feasibility: "possible"
+- score 40~69  → overall_feasibility: "partial"
+- score 0~39   → overall_feasibility: "difficult"
+- high severity 병목이 핵심 기능에 직결되는 경우: score ≤ 60 (즉 "partial" 이하)
+- high severity 병목이 2개 이상인 경우: score ≤ 50 (즉 "partial" 이하)
 - high severity 병목이 없는 경우: score는 다른 요소로 자유롭게 산정
 
 반드시 순수 JSON으로만 응답하세요:
@@ -349,7 +352,7 @@ export function buildVerdictPrompt(
 
   const feasibilitySection = feasibility
     ? `기술 실현성:
-- 점수: ${feasibility.score ?? 50}/100
+- 점수: ${feasibility.score ?? 50}/100 (이 값을 scores.feasibility에 그대로 사용하세요)
 - 판정: ${feasibility.overall_feasibility || "unknown"}
 - 핵심 리스크: ${JSON.stringify(feasibility.key_risks || [])}
 - high severity 병목 (${highSeverityBottlenecks.length}개): ${
@@ -362,7 +365,7 @@ export function buildVerdictPrompt(
   const differentiationSection = differentiation
     ? `차별화:
 - 경쟁 수준: ${differentiation.competition_level || "unknown"}
-- 경쟁 점수: ${differentiation.competition_score ?? 50}/100
+- 경쟁 점수: ${differentiation.competition_score ?? 50}/100 (높을수록 경쟁이 적고 유리 — scores.competition에 그대로 사용하세요)
 - 95% 이상 일치하는 보일러플레이트/완제품 OSS 발견 여부: ${differentiation.is_exact_match_found ? "예 (강력한 Fork/Clone 권장)" : "아니오"}
 - 차별화 포인트: ${JSON.stringify(differentiation.unique_angles || [])}`
     : "차별화: (미선택)";
@@ -407,7 +410,8 @@ ${dataSummary}
 - alternative_ideas는 각 항목을 10자 이내의 짧은 키워드/제목으로 작성하세요.
 - has_blocking_issues=true이면 verdict는 PIVOT 또는 KILL을 우선 고려하세요.
 - has_blocking_issues=true일 때 alternative_ideas에는 공식 API가 있는 대안을 포함하세요.
-- [HIGH SEVERITY 병목 규칙]: '기술 실현성'의 high severity 병목이 1개 이상이고 그 병목이 아이디어의 핵심 기능에 직결된다면, GO 판정을 내리지 마세요. 핵심 기능이 구현 가능한지 먼저 검증해야 하므로 PIVOT을 우선 고려하세요. high severity 병목이 2개 이상이면 confidence를 60 이하로 제한하세요.`;
+- [HIGH SEVERITY 병목 규칙]: '기술 실현성'의 high severity 병목이 1개 이상이고 그 병목이 아이디어의 핵심 기능에 직결된다면, GO 판정을 내리지 마세요. 핵심 기능이 구현 가능한지 먼저 검증해야 하므로 PIVOT을 우선 고려하세요. high severity 병목이 2개 이상이면 confidence를 60 이하로 제한하세요.
+- [scores.timing 기준]: 아래 기준으로 산정하세요. (1) GitHub 유사 저장소 0개 + 웹 경쟁자 5개 미만 → 80~100 (선점 기회). (2) 기술 스택이 최근 2년 내 등장한 AI/LLM 영역 → +10. (3) 이미 레드오션이거나 시장이 포화 상태 → 20~40. (4) 그 외 → 50 기본값.`;
 }
 
 export function buildDataVerificationPrompt(

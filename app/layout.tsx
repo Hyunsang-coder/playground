@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   title: "Valid8 — 바이브코딩 실현성 분석기",
   description: "바이브코딩 실현성을 냉정하게 분석합니다",
   icons: {
-    icon: "/skull.svg",
+    icon: "/shield.svg",
   },
 };
 

@@ -3,6 +3,25 @@ import { IdeaAnalyzer } from "../app/api/analyze/analyzer";
 import * as fs from "fs";
 import * as path from "path";
 
+type Step1Result = {
+    competitors?: unknown[];
+    github_repos?: unknown[];
+};
+
+type Step2DataSource = {
+    name?: string;
+    has_official_api?: boolean;
+    crawlable?: boolean;
+    blocking?: boolean;
+    note?: string;
+};
+
+type Step2Result = {
+    data_availability?: {
+        data_sources?: Step2DataSource[];
+    };
+};
+
 // Manually load .env.local
 const envPath = path.resolve(process.cwd(), ".env.local");
 if (fs.existsSync(envPath)) {
@@ -42,14 +61,16 @@ async function run() {
             } else if (event.event === "step_result") {
                 console.log(`\n[STEP RESULT] ${event.data.step}`);
                 if (event.data.step === 1) {
-                    const res = event.data.result as any;
-                    console.log(`- Web Competitors: ${res.competitors.length}`);
-                    console.log(`- GitHub Repos: ${res.github_repos ? res.github_repos.length : 'N/A'}`);
+                    const res = (event.data.result ?? {}) as Step1Result;
+                    const competitorsCount = Array.isArray(res.competitors) ? res.competitors.length : 0;
+                    const githubRepoCount = Array.isArray(res.github_repos) ? res.github_repos.length : "N/A";
+                    console.log(`- Web Competitors: ${competitorsCount}`);
+                    console.log(`- GitHub Repos: ${githubRepoCount}`);
                 } else if (event.data.step === 2) { // Feasibility & Data
-                    const res = event.data.result as any;
-                    if (res.data_availability) {
+                    const res = (event.data.result ?? {}) as Step2Result;
+                    if (res.data_availability && Array.isArray(res.data_availability.data_sources)) {
                         console.log("- Data Sources Checked:");
-                        res.data_availability.data_sources.forEach((ds: any) => {
+                        res.data_availability.data_sources.forEach((ds) => {
                             console.log(`  * ${ds.name}: API=${ds.has_official_api}, Crawlable=${ds.crawlable}, Blocking=${ds.blocking}`);
                             console.log(`    Note: ${ds.note}`);
                         });

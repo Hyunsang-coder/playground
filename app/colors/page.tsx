@@ -1,14 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo } from "react";
 import { ShieldCheck, Search, Loader2, CheckCircle2, Globe, Brain, Gavel, Flame, ArrowLeftRight, GitFork, Skull, Waves } from "lucide-react";
+import { useTheme, type ThemeId } from "../components/ThemeProvider";
 
 // ── 팔레트 정의 ──────────────────────────────────────────────────
 
-const PALETTES = [
+type Palette = {
+  id: ThemeId;
+  name: string;
+  description: string;
+  brand: string;
+  brandHover: string;
+  brandLight: string;
+  brandRing: string;
+  brandShadow: string;
+  bgGradient: string;
+  stepLoadingBg: string;
+  tag: string;
+};
+
+const PALETTES: Palette[] = [
   {
-    id: "current",
-    name: "현재 (인디고)",
+    id: "indigo",
+    name: "인디고",
     description: "기본 · 흔함",
     brand: "#6366f1",
     brandHover: "#4f46e5",
@@ -59,7 +74,7 @@ const PALETTES = [
     tag: "🟠",
   },
   {
-    id: "dark",
+    id: "slate",
     name: "다크 슬레이트",
     description: "미니멀 · 판정 강조",
     brand: "#334155",
@@ -71,9 +86,7 @@ const PALETTES = [
     stepLoadingBg: "#f8fafc",
     tag: "⚫",
   },
-] as const;
-
-type Palette = typeof PALETTES[number];
+];
 
 // ── 미니 컴포넌트들 ──────────────────────────────────────────────
 
@@ -274,8 +287,11 @@ function PalettePreview({ p, isSelected, onClick }: { p: Palette; isSelected: bo
 // ── 메인 페이지 ─────────────────────────────────────────────────
 
 export default function ColorsPage() {
-  const [selected, setSelected] = useState<string>("current");
-  const selectedPalette = PALETTES.find((p) => p.id === selected)!;
+  const { theme, setTheme } = useTheme();
+  const selectedPalette = useMemo(
+    () => PALETTES.find((p) => p.id === theme) || PALETTES[0],
+    [theme]
+  );
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -292,8 +308,8 @@ export default function ColorsPage() {
             <PalettePreview
               key={p.id}
               p={p}
-              isSelected={selected === p.id}
-              onClick={() => setSelected(p.id)}
+              isSelected={theme === p.id}
+              onClick={() => setTheme(p.id)}
             />
           ))}
         </div>
@@ -327,7 +343,7 @@ shadow-brand/20 hover:shadow-brand/25`}
           </pre>
           <p className="mt-3 text-xs text-slate-400">
             globals.css의 <code className="bg-white/60 px-1 rounded">--color-brand</code> 값만 바꾸면 전체 적용됩니다.
-            {selectedPalette.id === "current" && " (현재 적용 중)"}
+            {theme === selectedPalette.id && " (현재 적용 중)"}
           </p>
         </div>
       </div>

@@ -327,9 +327,6 @@ export class IdeaAnalyzer {
     const timeout = depth === "advanced" ? 25000 : 15000;
 
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeout);
-
       const [resp1, resp2] = await Promise.all([
         fetch("https://api.tavily.com/search", {
           method: "POST",
@@ -341,7 +338,7 @@ export class IdeaAnalyzer {
             search_depth: depth,
             include_raw_content: true,
           }),
-          signal: controller.signal,
+          signal: AbortSignal.timeout(timeout),
         }),
         fetch("https://api.tavily.com/search", {
           method: "POST",
@@ -353,16 +350,15 @@ export class IdeaAnalyzer {
             search_depth: depth,
             include_raw_content: true,
           }),
-          signal: controller.signal,
+          signal: AbortSignal.timeout(timeout),
         }),
       ]);
-
-      clearTimeout(timer);
 
       const competitors: Competitor[] = [];
       const seenUrls = new Set<string>();
 
       for (const resp of [resp1, resp2]) {
+        if (!resp.ok) continue;
         const data = await resp.json();
         for (const r of data.results || []) {
           const url = r.url || "";
@@ -389,7 +385,7 @@ export class IdeaAnalyzer {
 
     try {
       const { text } = await generateText({
-        model: anthropic("claude-sonnet-4-6"),
+        model: anthropic("claude-haiku-4-5-20251001"),
         maxOutputTokens: 128,
         messages: [{ role: "user", content: buildRefineSearchQueriesPrompt(idea, currentResults) }],
       });
@@ -579,9 +575,8 @@ export class IdeaAnalyzer {
               query,
               max_results: 3,
               search_depth: "basic",
-              include_raw_content: true,
             }),
-            signal: AbortSignal.timeout(20000),
+            signal: AbortSignal.timeout(15000),
           });
 
           if (!resp.ok) {

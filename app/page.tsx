@@ -49,10 +49,12 @@ export default function Page() {
   return (
     <div className="min-h-screen">
       <div className="mx-auto max-w-3xl px-4 pb-20">
-        <Header />
-
-        {/* Input section */}
-        {!hasResults && <IdeaInput onSubmit={handleAnalyze} isLoading={isAnalyzing} />}
+        <div className={`transition-all duration-700 ease-in-out ${hasResults ? "pt-4 sm:pt-6" : "pt-[15vh] sm:pt-[20vh]"}`}>
+          <Header />
+          <div className={`transition-all duration-700 ease-in-out origin-top ${hasResults ? "scale-[0.95] opacity-80 pb-6" : "scale-100 opacity-100 pb-12"}`}>
+            <IdeaInput onSubmit={handleAnalyze} isLoading={isAnalyzing} />
+          </div>
+        </div>
 
         {/* Error */}
         {error && (

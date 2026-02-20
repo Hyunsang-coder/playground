@@ -11,7 +11,6 @@ import {
   fallbackDataAvailability,
   cacheGet,
   cacheSet,
-  sleep,
   type SSEEvent,
   type Competitor,
   type WebSearchResult,
@@ -30,7 +29,6 @@ import {
   buildFeasibilityPrompt,
   buildDifferentiationPrompt,
   buildVerdictPrompt,
-  buildDataVerificationPrompt,
 } from "./prompts";
 import {
   selectNpmCandidate,
@@ -656,31 +654,6 @@ export class IdeaAnalyzer {
     );
 
     return new Map(results);
-  }
-
-  private mergeEvidenceByQueries(
-    evidenceMap: Map<string, SearchEvidence>,
-    queries: string[]
-  ): SearchEvidence {
-    const urls = new Set<string>();
-    const snippets = new Set<string>();
-
-    for (const query of queries) {
-      const evidence = evidenceMap.get(query);
-      if (!evidence) continue;
-
-      for (const url of evidence.urls) {
-        if (url) urls.add(url);
-      }
-      for (const snippet of evidence.snippets) {
-        if (snippet) snippets.add(snippet);
-      }
-    }
-
-    return {
-      urls: Array.from(urls).slice(0, 8),
-      snippets: Array.from(snippets).slice(0, 8),
-    };
   }
 
   private isRobotsDisallowAll(content: string): boolean {

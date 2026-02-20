@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ShieldCheck, Search, Loader2, CheckCircle2, Globe, Brain, Gavel, Flame, ArrowLeftRight, GitFork, Skull, Waves, Swords } from "lucide-react";
+import { ShieldCheck, Search, Loader2, CheckCircle2, Globe, Brain, Gavel, Flame, ArrowLeftRight, GitFork, Skull, Waves } from "lucide-react";
 
 // ── 팔레트 정의 ──────────────────────────────────────────────────
 
@@ -164,7 +164,7 @@ function MiniStepCard({ p, step, icon: Icon, title, status }: {
   );
 }
 
-function MiniVerdictBadge({ verdict, p }: { verdict: "GO" | "PIVOT" | "FORK" | "KILL"; p: Palette }) {
+function MiniVerdictBadge({ verdict }: { verdict: "GO" | "PIVOT" | "FORK" | "KILL" }) {
   const configs = {
     GO:    { color: "#22c55e", bg: "#f0fdf4", border: "#86efac", Icon: Flame,          label: "GO",   glow: "rgba(34,197,94,0.2)" },
     PIVOT: { color: "#f59e0b", bg: "#fffbeb", border: "#fcd34d", Icon: ArrowLeftRight, label: "PIVOT", glow: "rgba(245,158,11,0.2)" },
@@ -197,7 +197,7 @@ function MiniScoreBar({ label, score, color }: { label: string; score: number; c
   );
 }
 
-function MiniDiffCard({ p }: { p: Palette }) {
+function MiniDiffCard() {
   return (
     <div className="mx-5 mb-3 rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-sm">
       <div className="flex items-center gap-2 mb-2">
@@ -210,11 +210,11 @@ function MiniDiffCard({ p }: { p: Palette }) {
   );
 }
 
-function MiniVerdictCard({ p }: { p: Palette }) {
+function MiniVerdictCard() {
   return (
     <div className="mx-5 mb-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
       <div className="flex flex-col items-center gap-2 mb-3">
-        <MiniVerdictBadge verdict="GO" p={p} />
+        <MiniVerdictBadge verdict="GO" />
         <div className="text-3xl font-black text-slate-900">83</div>
       </div>
       <div className="space-y-1.5">
@@ -247,10 +247,10 @@ function PalettePreview({ p, isSelected, onClick }: { p: Palette; isSelected: bo
         <MiniHeader p={p} />
         <MiniInput p={p} />
         <MiniStepCard p={p} step={1} icon={Globe} title="시장 및 차별화 분석" status="done" />
-        <MiniDiffCard p={p} />
+        <MiniDiffCard />
         <MiniStepCard p={p} step={2} icon={Brain} title="기술 실현성 분석" status="loading" />
         <MiniStepCard p={p} step={3} icon={Gavel} title="종합 판정" status="pending" />
-        <MiniVerdictCard p={p} />
+        <MiniVerdictCard />
       </div>
 
       {/* 팔레트 정보 */}

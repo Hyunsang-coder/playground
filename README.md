@@ -93,5 +93,4 @@ app/
 npm run dev      # 개발 서버 (localhost:3000)
 npm run build    # 프로덕션 빌드
 npm run start    # 프로덕션 서버
-npm run lint     # ESLint
 ```

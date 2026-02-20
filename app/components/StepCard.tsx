@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Loader2, Circle, Globe, Github, Brain, Swords, Gavel } from "lucide-react";
+import { CheckCircle2, Loader2, Circle, Globe, Brain, Gavel } from "lucide-react";
 import type {
   AnalysisStep,
   MarketAndDifferentiationResult,
@@ -35,8 +35,6 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function StepCard({ step, idea, onReanalyze }: Props) {
-  const result = step.result;
-
   return (
     <div className="step-card animate-slide-up">
       {/* Header */}

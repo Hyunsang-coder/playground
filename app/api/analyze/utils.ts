@@ -163,10 +163,17 @@ export function fallbackDifferentiation(
   const webSignalCount = competitors.raw_count || competitors.competitors.length || 0;
   const githubSignalCount = githubResults.repos.length || 0;
   const compCount = webSignalCount + githubSignalCount;
+  // competition_score: 높을수록 경쟁 적음 (유리). level과 범위 일치 필수.
+  // blue_ocean: 70~100 / moderate: 40~69 / red_ocean: 0~39
   const level = compCount > 12 ? "red_ocean" : compCount > 4 ? "moderate" : "blue_ocean";
+  const rawScore = Math.max(0, 100 - compCount * 7);
+  const competition_score =
+    level === "red_ocean" ? Math.min(rawScore, 39) :
+    level === "moderate"  ? Math.min(Math.max(rawScore, 40), 69) :
+                            Math.max(rawScore, 70);
   return {
     competition_level: level,
-    competition_score: Math.max(0, 100 - compCount * 7),
+    competition_score,
     existing_solutions: [],
     unique_angles: [],
     is_exact_match_found: false,

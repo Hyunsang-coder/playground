@@ -296,6 +296,13 @@ ${githubList}
 - "유의미 후보 수"를 1차 근거로 사용하세요.
 - is_exact_match_found 는 오직 제공된 GitHub 프로젝트 중 하나가 사용자의 아이디어를 95% 이상 그대로 커버할 때만 true입니다. 유사한 수준이면 false입니다.
 
+competition_score 산정 기준 (반드시 준수):
+- competition_score는 "경쟁이 적을수록 높은 점수" 입니다. 즉 경쟁이 치열할수록 낮은 점수입니다.
+- blue_ocean  → competition_score: 70~100
+- moderate    → competition_score: 40~69
+- red_ocean   → competition_score: 0~39
+- competition_level과 competition_score는 반드시 위 범위 안에서 일치해야 합니다.
+
 반드시 순수 JSON으로만 응답하세요:
 
 {

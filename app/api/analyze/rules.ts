@@ -226,9 +226,10 @@ export function selectNpmCandidate(query: string, candidates: NpmSearchCandidate
   scored.sort((a, b) => b.score - a.score);
   const best = scored[0];
   const requiredOverlap = queryTokens.length >= 2 ? 2 : 1;
+  const requiredScore = queryTokens.length >= 2 ? 0.5 : 0.7;
   const confident =
     best.exactMatch ||
-    (best.tokenOverlap >= requiredOverlap && best.candidate.score >= 0.35);
+    (best.tokenOverlap >= requiredOverlap && best.candidate.score >= requiredScore);
 
   if (!confident) {
     return {

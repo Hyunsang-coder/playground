@@ -90,8 +90,23 @@ app/
 ## Scripts
 
 ```bash
-npm run dev      # 개발 서버 (localhost:3000)
-npm run build    # 프로덕션 빌드
-npm run start    # 프로덕션 서버
+npm run dev       # 개발 서버 (localhost:3000)
+npm run build     # 프로덕션 빌드
+npm run start     # 프로덕션 서버
 npm run typecheck # 라우트 타입 생성 + TypeScript 타입 체크
+npm test          # 단위 + API 테스트 (Vitest, mock 기반 — API 키 불필요)
+npm run test:watch # Vitest watch 모드
+npm run test:e2e  # E2E 테스트 (Playwright — .env.local API 키 + 서버 필요)
 ```
+
+## Testing
+
+| 구분 | 프레임워크 | 위치 | API 키 필요 |
+|------|-----------|------|------------|
+| 단위 테스트 | Vitest | `tests/unit/` | No |
+| API 테스트 | Vitest | `tests/api/` | No |
+| E2E 테스트 | Playwright | `tests/e2e/` | Yes |
+
+- **단위 테스트**: `parseJsonSafe`, `fallback*`, 캐시, `evaluateDataSourceWithRules`, `selectNpmCandidate`
+- **API 테스트**: `/api/analyze`, `/api/chat` 입력 검증 (IdeaAnalyzer + AI SDK mock 처리)
+- **E2E 테스트**: 실제 브라우저로 전체 분석 플로우 검증 (페이지 로드 → 입력 → Step 1~3 → VerdictCard → ChatPanel)

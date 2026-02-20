@@ -376,14 +376,19 @@ export class IdeaAnalyzer {
 
       for (const resp of [resp1, resp2]) {
         if (!resp.ok) continue;
-        const data = await resp.json();
+        let data: { results?: Record<string, unknown>[] };
+        try {
+          data = await resp.json();
+        } catch {
+          continue;
+        }
         for (const r of data.results || []) {
-          const url = r.url || "";
+          const url = (r.url as string) || "";
           if (url && !seenUrls.has(url)) {
             seenUrls.add(url);
-            const raw = r.raw_content || r.content || "";
+            const raw = ((r.raw_content as string) || (r.content as string) || "");
             competitors.push({
-              title: r.title || "",
+              title: (r.title as string) || "",
               url,
               snippet: raw.slice(0, 500),
             });

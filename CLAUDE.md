@@ -42,7 +42,7 @@ Built for the OKKY Vibe Coding Hackathon (2026.02.21, 4-hour development window)
     ├── useAnalysis.ts     # Custom hook — SSE stream parsing + state management
     ├── components/
     │   ├── Header.tsx           # App title with shield-check icon
-    │   ├── IdeaInput.tsx        # Idea textarea + step selector + example chips
+    │   ├── IdeaInput.tsx        # Idea textarea + example chips (always runs all 3 steps)
     │   ├── StepCard.tsx         # Step wrapper with icon/status/loading skeleton
     │   ├── CompetitorList.tsx   # Step 1 result — web competitor + GitHub cards
     │   ├── GitHubList.tsx       # Step 1 result — GitHub repo cards with stars
@@ -184,8 +184,7 @@ Analysis complete → ChatPanel appears
 Page
 ├── Header
 ├── IdeaInput (shown when no steps started)
-│   └── Step selector (1-3 toggles, all-or-none shortcut)
-│       └── Validation: step 3 cannot be selected alone
+│   └── Always submits all 3 steps (One-Click UX, no step selector)
 └── StepCard[] (shown when analyzing or results exist)
     ├── Loading skeleton (while steps.length === 0 and isAnalyzing)
     ├── CompetitorList + DifferentiationCard  (step 1)
@@ -214,7 +213,7 @@ Request body:
 { "idea": "string", "enabledSteps": [1, 2, 3] }
 ```
 
-`enabledSteps` defaults to all 3. Step 3 alone is rejected with 400.
+`enabledSteps` is always `[1, 2, 3]` — the UI hardcodes all 3 steps (One-Click UX). The field is accepted by the API for forward compatibility but is not user-configurable.
 
 SSE stream events (format: `data: {json}\n\n`):
 - `step_start`: `{ "step": 1-3, "title": "string", "description": "string" }`

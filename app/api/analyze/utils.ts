@@ -219,10 +219,14 @@ const searchCache = new Map<string, { timestamp: number; result: unknown }>();
 
 function evictExpired(): void {
   const now = Date.now();
+  const expiredKeys: string[] = [];
   for (const [key, entry] of searchCache) {
     if (now - entry.timestamp >= CACHE_TTL) {
-      searchCache.delete(key);
+      expiredKeys.push(key);
     }
+  }
+  for (const key of expiredKeys) {
+    searchCache.delete(key);
   }
 }
 

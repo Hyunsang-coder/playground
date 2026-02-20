@@ -8,37 +8,32 @@ interface Props {
   isLoading: boolean;
 }
 
-const STEPS = [
-  { step: 1, label: "시장/차별성 분석" },
-  { step: 2, label: "실현성 및 데이터 검증" },
-  { step: 3, label: "종합 판정" },
-];
+interface Props {
+  onSubmit: (idea: string, enabledSteps: number[]) => void;
+  isLoading: boolean;
+}
 
 const EXAMPLES = [
-  "AI 기반 뉴스 팩트체커",
+  "마크다운 기반의 이력서 생성기 웹앱",
+  "GitHub PR을 자동으로 리뷰해주는 봇",
+  "우주 쓰레기 궤도 통합 분석 시뮬레이터",
   "Claude Code 세션 간 컨텍스트 자동 유지 도구",
-  "해커톤 아이디어 검증기",
-  "AI 코드 리뷰 자동화 도구",
 ];
 
 export default function IdeaInput({ onSubmit, isLoading }: Props) {
   const [idea, setIdea] = useState("");
-  const [enabledSteps, setEnabledSteps] = useState<number[]>([1, 2, 3]);
-  const isStep3Only = enabledSteps.length === 1 && enabledSteps.includes(3);
 
-  const toggleStep = (step: number) => {
-    setEnabledSteps((prev) =>
-      prev.includes(step) ? prev.filter((s) => s !== step) : [...prev, step].sort((a, b) => a - b)
-    );
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!idea.trim() || isLoading) return;
+    onSubmit(idea.trim(), [1, 2, 3]); // Always run all steps for One-Click UX
   };
 
-  const allSelected = enabledSteps.length === STEPS.length;
-  const toggleAll = () => setEnabledSteps(allSelected ? [] : [1, 2, 3]);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!idea.trim() || isLoading || enabledSteps.length === 0 || isStep3Only) return;
-    onSubmit(idea.trim(), enabledSteps);
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
   };
 
   return (
@@ -48,8 +43,9 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
         <textarea
           value={idea}
           onChange={(e) => setIdea(e.target.value)}
-          placeholder="아이디어를 한 줄로 입력하세요..."
-          rows={2}
+          onKeyDown={handleKeyDown}
+          placeholder="아이디어를 입력하세요... (Enter로 바로 검증)"
+          rows={3}
           className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 sm:px-6 py-4 text-lg sm:text-xl text-slate-800 placeholder-slate-400 shadow-sm outline-none transition-all focus:border-brand/50 focus:ring-2 focus:ring-brand/10 focus:shadow-md"
           disabled={isLoading}
         />
@@ -70,57 +66,16 @@ export default function IdeaInput({ onSubmit, isLoading }: Props) {
         ))}
       </div>
 
-      {/* Step selector */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-semibold text-slate-700">분석 단계 선택</p>
-          <button
-            type="button"
-            onClick={toggleAll}
-            className="text-xs font-medium text-brand hover:underline"
-          >
-            {allSelected ? "전체 해제" : "전체 선택"}
-          </button>
-        </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {STEPS.map((item) => {
-            const checked = enabledSteps.includes(item.step);
-            return (
-              <button
-                key={item.step}
-                type="button"
-                onClick={() => toggleStep(item.step)}
-                className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all ${checked
-                    ? "border-brand/40 bg-brand/5 text-brand"
-                    : "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50"
-                  }`}
-              >
-                {checked ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-                <span>
-                  {item.step}. {item.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {enabledSteps.length === 0 && (
-          <p className="mt-3 text-xs text-rose-600">최소 1개 이상의 단계를 선택해야 합니다.</p>
-        )}
-        {isStep3Only && (
-          <p className="mt-3 text-xs text-rose-600">종합 판정(3번)은 단독 선택할 수 없습니다. 1~2번 중 하나 이상을 함께 선택하세요.</p>
-        )}
-      </div>
 
       {/* Submit button */}
       <button
         type="submit"
-        disabled={!idea.trim() || isLoading || enabledSteps.length === 0 || isStep3Only}
+        disabled={!idea.trim() || isLoading}
         className="flex w-full items-center justify-center gap-3 rounded-2xl bg-brand px-6 sm:px-8 py-3.5 sm:py-4 text-lg sm:text-xl font-bold text-white shadow-lg shadow-brand/20 transition-all hover:bg-indigo-600 hover:shadow-xl hover:shadow-brand/25 disabled:opacity-40 disabled:shadow-none disabled:hover:bg-brand"
       >
         <Search className="h-6 w-6" />
-        {isLoading ? "분석 중..." : "이 아이디어를 검증하기"}
+        {isLoading ? "분석 중..." : "바이브코딩(AI)으로 당장 구현 가능한가요?"}
       </button>
     </form>
   );

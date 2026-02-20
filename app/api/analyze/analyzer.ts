@@ -33,7 +33,6 @@ import {
   buildDataVerificationPrompt,
 } from "./prompts";
 import {
-  evaluateDataSourceWithRules,
   selectNpmCandidate,
   type NpmSearchCandidate,
 } from "./rules";
@@ -836,15 +835,21 @@ export class IdeaAnalyzer {
     try {
       const evidenceRecord: Record<string, { urls: string[]; snippets: string[] }> = {};
       for (const [query, ev] of evidenceMap) {
-        evidenceRecord[query] = { urls: ev.urls, snippets: ev.snippets };
+        // Trim evidence locally to save input tokens: only top 2 URLs and top 3 Snippets
+        evidenceRecord[query] = {
+          urls: ev.urls.slice(0, 2),
+          snippets: ev.snippets.slice(0, 3)
+        };
       }
 
       const prompt = buildDataJudgmentPrompt(dataSources, libraries, evidenceRecord);
-      const { text } = await generateText({
+      const { text, usage } = await generateText({
         model: anthropic("claude-sonnet-4-6"),
         maxOutputTokens: 1024,
         messages: [{ role: "user", content: prompt }],
       });
+
+      console.log(`[Token Usage: getClaudeDataJudgment] IN: ${(usage as any).promptTokens} | OUT: ${(usage as any).completionTokens}`);
 
       const parsed = parseJsonSafe<Partial<DataAvailabilityResult>>(text.trim(), {});
       if (!parsed || !Array.isArray(parsed.data_sources)) return null;
@@ -931,67 +936,58 @@ export class IdeaAnalyzer {
       const uniqueQueries = Array.from(new Set(sourceQueries));
       const evidenceMap = await this.doDataAvailabilitySearch(uniqueQueries, 9);
 
-      // Dual validation: rules + Claude judgment in parallel
-      const [ruleBasedDataSources, claudeJudgment, libraryResult] = await Promise.all([
-        Promise.all(
-          dataSources.map(async (source) => {
-            const evidence = this.mergeEvidenceByQueries(
-              evidenceMap,
-              sourceQueriesByName.get(source) || []
-            );
-            const robots = await this.checkRobotsPolicy(evidence.urls);
-            const judged = evaluateDataSourceWithRules({
-              urls: evidence.urls,
-              snippets: evidence.snippets,
-              robotsDisallowAll: robots.disallowAll,
-              robotsCheckedDomain: robots.domain,
-            });
-
-            return {
-              name: source,
-              has_official_api: judged.has_official_api,
-              crawlable: judged.crawlable,
-              evidence_url: judged.evidence_url,
-              blocking: judged.blocking,
-              note: judged.note,
-            };
-          })
-        ),
+      // Single high-accuracy LLM validation + URL Check
+      const [claudeJudgment, libraryResult] = await Promise.all([
         this.getClaudeDataJudgment(dataSources, libraries, evidenceMap),
         Promise.all(libraries.map((library) => this.validateLibraryOnNpm(library))),
       ]);
 
-      // LLM verification
-      const llmVerification = await this.verifyDataAvailabilityWithLLM(dataSources, evidenceMap);
-
       const dataSourceResult = await Promise.all(
-        dataSources.map(async (source, i) => {
-          const ruleResult = ruleBasedDataSources[i];
-          const llmResult = llmVerification.find(v => v.name === source);
+        dataSources.map(async (source) => {
+          const judged = claudeJudgment?.data_sources.find((s) => s.name === source);
 
-          // Merge: LLM result takes precedence for blocking/api status if available
-          const merged = {
-            name: source,
-            has_official_api: llmResult ? llmResult.has_official_api : ruleResult.has_official_api,
-            crawlable: llmResult ? llmResult.crawlable : ruleResult.crawlable,
-            evidence_url: ruleResult.evidence_url, // Keep evidence URL from rules as it picks from actual URLs
-            blocking: llmResult ? llmResult.blocking : ruleResult.blocking,
-            note: llmResult ? `${llmResult.reason} (AI 검증)` : ruleResult.note,
-          };
+          if (!judged) {
+            return {
+              name: source,
+              has_official_api: false,
+              crawlable: false,
+              blocking: true,
+              note: "AI 검증 실패 (안전장치 발동)",
+            };
+          }
 
-          // URL HEAD verification: confirm evidence URL is actually reachable
-          if (merged.evidence_url) {
-            const alive = await this.verifyApiUrl(merged.evidence_url);
-            if (alive && merged.has_official_api) {
-              merged.note = `${merged.note} (URL 검증 완료)`;
-            } else if (!alive && merged.has_official_api) {
-              merged.has_official_api = false;
-              merged.blocking = !merged.crawlable;
-              merged.note = `${merged.note} (근거 URL 접근 불가 — 수동 확인 필요)`;
+          // robots.txt and URL HEAD verification
+          let finalNote = judged.note;
+          let finalBlocking = judged.blocking;
+          let finalHasApi = judged.has_official_api;
+
+          if (judged.evidence_url) {
+            const alive = await this.verifyApiUrl(judged.evidence_url);
+            if (alive && finalHasApi) {
+              finalNote = `${finalNote} (URL 검증 완료)`;
+            } else if (!alive && finalHasApi) {
+              finalHasApi = false;
+              finalBlocking = !judged.crawlable;
+              finalNote = `${finalNote} (근거 URL 접근 불가 — 수동 확인 필요)`;
+            }
+
+            if (judged.crawlable && !finalBlocking) {
+              const robots = await this.checkRobotsPolicy([judged.evidence_url]);
+              if (robots.disallowAll) {
+                finalBlocking = true;
+                finalNote = `${finalNote} (robots.txt 전면 차단 발견)`;
+              }
             }
           }
 
-          return merged;
+          return {
+            name: source,
+            has_official_api: finalHasApi,
+            crawlable: judged.crawlable,
+            evidence_url: judged.evidence_url,
+            blocking: finalBlocking,
+            note: finalNote,
+          };
         })
       );
 
@@ -1025,19 +1021,24 @@ export class IdeaAnalyzer {
       let collectedText = "";
       let charCount = 0;
 
-      const result = streamText({
+      const { textStream, usage } = streamText({
         model: anthropic("claude-sonnet-4-6"),
         maxOutputTokens: 4096,
         messages: [{ role: "user", content: prompt }],
       });
 
-      for await (const chunk of result.textStream) {
+      for await (const chunk of textStream) {
         collectedText += chunk;
         charCount += chunk.length;
         if (charCount >= 80) {
           charCount = 0;
           yield { type: "progress", text: `AI 응답 생성 중... (${collectedText.length}자)` };
         }
+      }
+
+      const finalUsage = await usage;
+      if (finalUsage) {
+        console.log(`[Token Usage: Stream] IN: ${(finalUsage as any).promptTokens} | OUT: ${(finalUsage as any).completionTokens}`);
       }
 
       const parsed = parseJsonSafe(collectedText.trim(), fallback);
@@ -1096,52 +1097,5 @@ export class IdeaAnalyzer {
     yield* this.callClaudeStream(prompt, fallback as unknown as Record<string, unknown>);
   }
 
-  private async verifyDataAvailabilityWithLLM(
-    dataSources: string[],
-    evidenceMap: Map<string, SearchEvidence>
-  ): Promise<Array<{ name: string; has_official_api: boolean; crawlable: boolean; blocking: boolean; reason: string }>> {
-    if (!this.anthropicApiKey || dataSources.length === 0) return [];
 
-    const sourcesWithEvidence = dataSources.map(source => {
-      // Find evidence relevant to this source
-      // This is a bit broad, but we can look for any evidence where the query contained the source name
-      // or just pass all evidence. For now, let's pass loosely matched evidence.
-      const relevantEvidence: { urls: string[]; snippets: string[] } = { urls: [], snippets: [] };
-      for (const [query, evidence] of evidenceMap) {
-        if (query.toLowerCase().includes(source.toLowerCase())) {
-          relevantEvidence.urls.push(...evidence.urls);
-          relevantEvidence.snippets.push(...evidence.snippets);
-        }
-      }
-      return {
-        name: source,
-        urls: relevantEvidence.urls.slice(0, 5),
-        snippets: relevantEvidence.snippets.slice(0, 5),
-      };
-    });
-
-    const prompt = buildDataVerificationPrompt(sourcesWithEvidence);
-
-    try {
-      const { text } = await generateText({
-        model: anthropic("claude-sonnet-4-6"),
-        maxOutputTokens: 1024,
-        messages: [{ role: "user", content: prompt }],
-      });
-
-      const parsed = parseJsonSafe<{
-        results: Array<{
-          name: string;
-          has_official_api: boolean;
-          crawlable: boolean;
-          blocking: boolean;
-          reason: string;
-        }>;
-      }>(text.trim(), { results: [] });
-
-      return parsed.results || [];
-    } catch {
-      return [];
-    }
-  }
 }

@@ -84,6 +84,7 @@ export interface DifferentiationResult {
   competition_score: number;
   existing_solutions: { name: string; similarity: number; weakness: string }[];
   unique_angles: string[];
+  is_exact_match_found: boolean;
   summary: string;
 }
 
@@ -168,6 +169,7 @@ export function fallbackDifferentiation(
     competition_score: Math.max(0, 100 - compCount * 7),
     existing_solutions: [],
     unique_angles: [],
+    is_exact_match_found: false,
     summary: `유의미 경쟁 신호 ${compCount}개(웹 ${webSignalCount}, GitHub ${githubSignalCount}) 기반 자동 판정`,
   };
 }

@@ -12,7 +12,7 @@ export default function Header() {
         </h1>
       </div>
       <p className="text-base sm:text-lg text-slate-500 text-center">
-        바이브코딩 실현성을 냉정하게 분석합니다
+        바닥부터 짜지 마세요. 바이브코딩 실현성과 동일 오픈 소스를 냉정하게 찾아냅니다.
       </p>
     </header>
   );

@@ -13,6 +13,7 @@ interface Props {
 const VERDICT_CONFIG = {
   GO: { label: "GO", color: "text-go", border: "border-emerald-300", bg: "bg-emerald-50", glowColor: "rgba(16,185,129,0.2)", emoji: "🔥", desc: "당장 코딩 시작하세요!" },
   PIVOT: { label: "PIVOT", color: "text-pivot", border: "border-amber-300", bg: "bg-amber-50", glowColor: "rgba(245,158,11,0.2)", emoji: "🔄", desc: "방향 수정이 필요합니다." },
+  FORK: { label: "FORK", color: "text-blue-600", border: "border-blue-300", bg: "bg-blue-50", glowColor: "rgba(37,99,235,0.2)", emoji: "🍴", desc: "기존 코드를 포크하세요!" },
   KILL: { label: "KILL", color: "text-kill", border: "border-rose-300", bg: "bg-rose-50", glowColor: "rgba(244,63,94,0.2)", emoji: "💀", desc: "다른 아이디어를 찾아보세요." },
 };
 

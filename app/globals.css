@@ -4,7 +4,7 @@
   --color-go: #10b981;
   --color-pivot: #f59e0b;
   --color-kill: #f43f5e;
-  --color-brand: #6366f1;
+  --color-brand: var(--brand);
 
   --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   --animate-fade-in: fadeIn 0.5s ease-out;
@@ -45,13 +45,68 @@
   100% { background-position: 200% 0; }
 }
 
+/* ── 테마 변수 ─────────────────────────────────────────────── */
+:root,
+[data-theme="hackathon"] {
+  --brand: #f97316;
+  --brand-hover: #ea580c;
+  --brand-light: rgba(249, 115, 22, 0.08);
+  --brand-ring: rgba(249, 115, 22, 0.15);
+  --brand-shadow: rgba(249, 115, 22, 0.25);
+  --bg-gradient:
+    radial-gradient(at 15% 0%, rgba(249, 115, 22, 0.05) 0%, transparent 50%),
+    radial-gradient(at 85% 100%, rgba(16, 185, 129, 0.04) 0%, transparent 50%);
+}
+
+[data-theme="indigo"] {
+  --brand: #6366f1;
+  --brand-hover: #4f46e5;
+  --brand-light: rgba(99, 102, 241, 0.08);
+  --brand-ring: rgba(99, 102, 241, 0.15);
+  --brand-shadow: rgba(99, 102, 241, 0.25);
+  --bg-gradient:
+    radial-gradient(at 15% 0%, rgba(99, 102, 241, 0.06) 0%, transparent 50%),
+    radial-gradient(at 85% 100%, rgba(16, 185, 129, 0.04) 0%, transparent 50%);
+}
+
+[data-theme="cyber"] {
+  --brand: #0ea5e9;
+  --brand-hover: #0284c7;
+  --brand-light: rgba(14, 165, 233, 0.08);
+  --brand-ring: rgba(14, 165, 233, 0.15);
+  --brand-shadow: rgba(14, 165, 233, 0.25);
+  --bg-gradient:
+    radial-gradient(at 15% 0%, rgba(14, 165, 233, 0.06) 0%, transparent 50%),
+    radial-gradient(at 85% 100%, rgba(16, 185, 129, 0.04) 0%, transparent 50%);
+}
+
+[data-theme="hacker"] {
+  --brand: #22c55e;
+  --brand-hover: #16a34a;
+  --brand-light: rgba(34, 197, 94, 0.08);
+  --brand-ring: rgba(34, 197, 94, 0.15);
+  --brand-shadow: rgba(34, 197, 94, 0.25);
+  --bg-gradient:
+    radial-gradient(at 15% 0%, rgba(34, 197, 94, 0.05) 0%, transparent 50%),
+    radial-gradient(at 85% 100%, rgba(34, 197, 94, 0.03) 0%, transparent 50%);
+}
+
+[data-theme="slate"] {
+  --brand: #334155;
+  --brand-hover: #1e293b;
+  --brand-light: rgba(51, 65, 85, 0.06);
+  --brand-ring: rgba(51, 65, 85, 0.12);
+  --brand-shadow: rgba(51, 65, 85, 0.20);
+  --bg-gradient:
+    radial-gradient(at 15% 0%, rgba(51, 65, 85, 0.05) 0%, transparent 50%),
+    radial-gradient(at 85% 100%, rgba(16, 185, 129, 0.03) 0%, transparent 50%);
+}
+
 @layer base {
   body {
     @apply text-slate-800 antialiased;
     background-color: #fafaf9;
-    background-image:
-      radial-gradient(at 15% 0%, rgba(99, 102, 241, 0.06) 0%, transparent 50%),
-      radial-gradient(at 85% 100%, rgba(16, 185, 129, 0.04) 0%, transparent 50%);
+    background-image: var(--bg-gradient);
     min-height: 100vh;
   }
 }

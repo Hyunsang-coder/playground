@@ -45,7 +45,7 @@ export default function StepCard({ step, idea, onReanalyze }: Props) {
           className={`flex h-10 w-10 items-center justify-center rounded-xl ${step.status === "done"
               ? "bg-emerald-50 text-go"
               : step.status === "loading"
-                ? "bg-indigo-50 text-brand"
+                ? "bg-brand/8 text-brand"
                 : "bg-slate-100 text-slate-400"
             }`}
         >

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, Flame, ArrowLeftRight, GitFork, Skull } from "lucide-react";
 import type { VerdictResult } from "../types";
 
 interface Props {
@@ -10,11 +10,13 @@ interface Props {
   onReanalyze?: (idea: string) => void;
 }
 
-const VERDICT_CONFIG = {
-  GO: { label: "GO", color: "text-go", border: "border-emerald-300", bg: "bg-emerald-50", glowColor: "rgba(16,185,129,0.2)", emoji: "🔥", desc: "당장 코딩 시작하세요!" },
-  PIVOT: { label: "PIVOT", color: "text-pivot", border: "border-amber-300", bg: "bg-amber-50", glowColor: "rgba(245,158,11,0.2)", emoji: "🔄", desc: "방향 수정이 필요합니다." },
-  FORK: { label: "FORK", color: "text-blue-600", border: "border-blue-300", bg: "bg-blue-50", glowColor: "rgba(37,99,235,0.2)", emoji: "🍴", desc: "기존 코드를 포크하세요!" },
-  KILL: { label: "KILL", color: "text-kill", border: "border-rose-300", bg: "bg-rose-50", glowColor: "rgba(244,63,94,0.2)", emoji: "💀", desc: "다른 아이디어를 찾아보세요." },
+type VerdictKey = "GO" | "PIVOT" | "FORK" | "KILL";
+
+const VERDICT_CONFIG: Record<VerdictKey, { label: string; color: string; border: string; bg: string; glowColor: string; Icon: typeof Flame; desc: string }> = {
+  GO: { label: "GO", color: "text-go", border: "border-emerald-300", bg: "bg-emerald-50", glowColor: "rgba(16,185,129,0.2)", Icon: Flame, desc: "당장 코딩 시작하세요!" },
+  PIVOT: { label: "PIVOT", color: "text-pivot", border: "border-amber-300", bg: "bg-amber-50", glowColor: "rgba(245,158,11,0.2)", Icon: ArrowLeftRight, desc: "방향 수정이 필요합니다." },
+  FORK: { label: "FORK", color: "text-blue-600", border: "border-blue-300", bg: "bg-blue-50", glowColor: "rgba(37,99,235,0.2)", Icon: GitFork, desc: "기존 코드를 포크하세요!" },
+  KILL: { label: "KILL", color: "text-kill", border: "border-rose-300", bg: "bg-rose-50", glowColor: "rgba(244,63,94,0.2)", Icon: Skull, desc: "다른 아이디어를 찾아보세요." },
 };
 
 function AnimatedScore({ value, color }: { value: number; color: string }) {
@@ -63,7 +65,8 @@ function ScoreBar({ label, score, delay }: { label: string; score: number; delay
 }
 
 export default function VerdictCard({ data, idea, onReanalyze }: Props) {
-  const config = VERDICT_CONFIG[data.verdict] || VERDICT_CONFIG.KILL;
+  const config = VERDICT_CONFIG[data.verdict as VerdictKey] || VERDICT_CONFIG.KILL;
+  const VerdictIcon = config.Icon;
   const cardRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
 
@@ -73,7 +76,7 @@ export default function VerdictCard({ data, idea, onReanalyze }: Props) {
 
   const handleCopy = async () => {
     const text = [
-      `${config.emoji} Valid8 판정: ${data.verdict} (${data.overall_score}/100)`,
+      `[${data.verdict}] Valid8 판정: ${data.verdict} (${data.overall_score}/100)`,
       idea ? `\n아이디어: ${idea}` : "",
       `\n${data.one_liner}`,
       `\n점수 상세:`,
@@ -98,7 +101,7 @@ export default function VerdictCard({ data, idea, onReanalyze }: Props) {
           className={`verdict-badge ${config.bg} ${config.border} border-2 animate-verdict-reveal animate-verdict-glow`}
           style={{ "--verdict-glow-color": config.glowColor } as React.CSSProperties}
         >
-          <span className="text-4xl">{config.emoji}</span>
+          <VerdictIcon className={`h-9 w-9 ${config.color}`} strokeWidth={2.5} />
           <span className={`text-4xl ${config.color}`}>{config.label}</span>
         </div>
         <p className={`text-sm font-semibold ${config.color}`}>{config.desc}</p>

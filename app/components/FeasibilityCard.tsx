@@ -14,6 +14,9 @@ import {
   Cpu,
   FileCode,
   ExternalLink,
+  RefreshCw,
+  CheckCircle,
+  Circle,
 } from "lucide-react";
 import type {
   FeasibilityResult,
@@ -40,9 +43,9 @@ const DIFFICULTY_COLORS = {
 };
 
 const VIBE_DIFFICULTY_CONFIG = {
-  easy: { label: "쉬움", emoji: "🟢", color: "text-go", bg: "bg-emerald-50", border: "border-emerald-200" },
-  medium: { label: "보통", emoji: "🟡", color: "text-pivot", bg: "bg-amber-50", border: "border-amber-200" },
-  hard: { label: "어려움", emoji: "🔴", color: "text-kill", bg: "bg-rose-50", border: "border-rose-200" },
+  easy: { label: "쉬움", color: "text-go", bg: "bg-emerald-50", border: "border-emerald-200" },
+  medium: { label: "보통", color: "text-pivot", bg: "bg-amber-50", border: "border-amber-200" },
+  hard: { label: "어려움", color: "text-kill", bg: "bg-rose-50", border: "border-rose-200" },
 };
 
 const BOTTLENECK_CONFIG: Record<
@@ -148,7 +151,7 @@ function DataAvailabilitySection({ data }: { data: DataAvailabilityResult }) {
           {source.has_official_api ? (
             <CheckCircle2 className="h-4 w-4 text-go" />
           ) : source.crawlable ? (
-            <span className="text-base">🔄</span>
+            <RefreshCw className="h-4 w-4 text-amber-500" />
           ) : (
             <XCircle className="h-4 w-4 text-kill" />
           )}
@@ -253,8 +256,15 @@ export default function FeasibilityCard({ data }: Props) {
           <Zap className={`h-5 w-5 shrink-0 ${vibeConfig.color}`} />
           <div>
             <div className="text-sm text-slate-500">바이브코딩 난이도</div>
-            <div className={`text-lg font-bold ${vibeConfig.color}`}>
-              {vibeConfig.emoji} {vibeConfig.label}
+            <div className={`flex items-center gap-1.5 text-lg font-bold ${vibeConfig.color}`}>
+              {vibeDifficulty === "easy" ? (
+                <CheckCircle className="h-5 w-5" />
+              ) : vibeDifficulty === "medium" ? (
+                <Circle className="h-5 w-5" />
+              ) : (
+                <AlertTriangle className="h-5 w-5" />
+              )}
+              {vibeConfig.label}
             </div>
           </div>
         </div>

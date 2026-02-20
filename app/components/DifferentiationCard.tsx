@@ -1,20 +1,23 @@
 "use client";
 
-import { Swords, Lightbulb } from "lucide-react";
+import { Swords, Lightbulb, Waves, Flame } from "lucide-react";
 import type { DifferentiationResult } from "../types";
 
 interface Props {
   data: DifferentiationResult;
 }
 
-const LEVEL_CONFIG = {
-  blue_ocean: { label: "블루오션", color: "text-go", emoji: "🌊" },
-  moderate: { label: "보통 경쟁", color: "text-pivot", emoji: "⚔️" },
-  red_ocean: { label: "레드오션", color: "text-kill", emoji: "🔴" },
+type LevelKey = "blue_ocean" | "moderate" | "red_ocean";
+
+const LEVEL_CONFIG: Record<LevelKey, { label: string; color: string; Icon: typeof Waves }> = {
+  blue_ocean: { label: "블루오션", color: "text-go", Icon: Waves },
+  moderate: { label: "보통 경쟁", color: "text-pivot", Icon: Swords },
+  red_ocean: { label: "레드오션", color: "text-kill", Icon: Flame },
 };
 
 export default function DifferentiationCard({ data }: Props) {
-  const config = LEVEL_CONFIG[data.competition_level] || LEVEL_CONFIG.moderate;
+  const config = LEVEL_CONFIG[data.competition_level as LevelKey] || LEVEL_CONFIG.moderate;
+  const LevelIcon = config.Icon;
 
   return (
     <div className="space-y-4">
@@ -22,8 +25,9 @@ export default function DifferentiationCard({ data }: Props) {
       <div className="flex items-center gap-4">
         <div className={`text-5xl font-black ${config.color}`}>{data.competition_score}</div>
         <div>
-          <div className={`text-lg font-bold ${config.color}`}>
-            {config.emoji} {config.label}
+          <div className={`flex items-center gap-2 text-lg font-bold ${config.color}`}>
+            <LevelIcon className="h-5 w-5" />
+            {config.label}
           </div>
           <div className="text-sm text-slate-500">{data.summary}</div>
         </div>

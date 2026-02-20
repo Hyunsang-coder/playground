@@ -52,7 +52,7 @@ async function run() {
     console.log(`Analyzing idea: ${idea}`);
 
     try {
-        const generator = analyzer.analyze(idea, [1, 2, 3, 4, 5]);
+        const generator = analyzer.analyze(idea, [1, 2, 3]);
         for await (const event of generator) {
             if (event.event === "step_start") {
                 console.log(`\n[STEP START] ${event.data.step}: ${event.data.title}`);

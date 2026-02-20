@@ -1,4 +1,4 @@
-// IdeaAnalyzer class — 5-step analysis pipeline, ported from backend/analyzer.py
+// IdeaAnalyzer class — 3-step analysis pipeline, ported from backend/analyzer.py
 // Uses Vercel AI SDK (@ai-sdk/anthropic + ai) instead of anthropic Python SDK
 
 import { generateText, streamText } from "ai";

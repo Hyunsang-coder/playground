@@ -6,7 +6,7 @@ import { DefaultChatTransport } from "ai";
 
 const MOCK_RESULTS = [
   { step: 1, title: "경쟁 제품 탐색", result: { competitors: [], raw_count: 0, summary: "테스트" } },
-  { step: 5, title: "종합 판정", result: { verdict: "GO", overall_score: 75, one_liner: "테스트 판정" } },
+  { step: 3, title: "종합 판정", result: { verdict: "GO", overall_score: 75, one_liner: "테스트 판정" } },
 ];
 
 export default function TestChatPage() {

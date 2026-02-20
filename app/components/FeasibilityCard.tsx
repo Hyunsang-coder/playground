@@ -48,6 +48,10 @@ const VIBE_DIFFICULTY_CONFIG = {
   hard: { label: "어려움", color: "text-kill", bg: "bg-rose-50", border: "border-rose-200" },
 };
 
+function isVibeDifficulty(value: unknown): value is keyof typeof VIBE_DIFFICULTY_CONFIG {
+  return value === "easy" || value === "medium" || value === "hard";
+}
+
 const BOTTLENECK_CONFIG: Record<
   BottleneckType,
   {
@@ -231,7 +235,9 @@ function StructuredBottleneckCard({ bottleneck }: { bottleneck: Bottleneck }) {
 
 export default function FeasibilityCard({ data }: Props) {
   const config = FEASIBILITY_CONFIG[data.overall_feasibility] || FEASIBILITY_CONFIG.partial;
-  const vibeDifficulty = data.vibe_coding_difficulty || "medium";
+  const vibeDifficulty = isVibeDifficulty(data.vibe_coding_difficulty)
+    ? data.vibe_coding_difficulty
+    : "medium";
   const vibeConfig = VIBE_DIFFICULTY_CONFIG[vibeDifficulty];
 
   return (

@@ -110,21 +110,19 @@ export class IdeaAnalyzer {
 
   async *analyze(
     idea: string,
-    enabledSteps: number[] = [1, 2, 3, 4, 5]
+    enabledSteps: number[] = [1, 2, 3]
   ): AsyncGenerator<SSEEvent> {
-    const activeSteps = enabledSteps.length > 0 ? enabledSteps : [1, 2, 3, 4, 5];
+    const activeSteps = enabledSteps.length > 0 ? enabledSteps : [1, 2, 3];
     const shouldRun = (step: number) => activeSteps.includes(step);
     const runStep1 = shouldRun(1);
     const runStep2 = shouldRun(2);
     const runStep3 = shouldRun(3);
-    const runStep4 = shouldRun(4);
-    const runStep5 = shouldRun(5);
 
     const searchQueries = runStep1
       ? await this.generateSearchQueries(idea)
       : { web_queries: [idea], github_query: idea };
 
-    // --- Step 1: Market Research (Merged Web + GitHub) ---
+    // --- Step 1: Market Research & Differentiation (Web + GitHub) ---
     let competitors: WebSearchResult = {
       competitors: [],
       raw_count: 0,
@@ -135,6 +133,7 @@ export class IdeaAnalyzer {
       total_count: 0,
       summary: "시장 조사 단계가 비활성화되었습니다.",
     };
+    let differentiation: DifferentiationResult = fallbackDifferentiation(competitors, githubResults);
 
     if (runStep1) {
       const webQueriesDisplay = (searchQueries.web_queries || [idea]).slice(0, 2).join(" / ");
@@ -144,37 +143,53 @@ export class IdeaAnalyzer {
         event: "step_start",
         data: {
           step: 1,
-          title: "시장 조사 (웹 + GitHub)",
-          description: `웹(${webQueriesDisplay}) 및 GitHub(${ghQueryDisplay}) 동시 분석 중...`,
+          title: "시장 및 차별화 분석",
+          description: `웹(${webQueriesDisplay}) & GitHub(${ghQueryDisplay}) 탐색 중...`,
         },
       };
+
+      yield { event: "step_progress", data: { step: 1, text: "웹 및 GitHub를 병렬로 탐색하고 있습니다..." } };
 
       // Run searches in parallel
       const [webResult, ghResult] = await Promise.all([
         this.searchWeb(idea, searchQueries.web_queries || []),
-        runStep2 ? this.searchGithub(idea, searchQueries.github_query || "") : Promise.resolve(githubResults),
+        this.searchGithub(idea, searchQueries.github_query || "")
       ]);
 
       competitors = webResult;
       githubResults = ghResult;
 
+      yield { event: "step_progress", data: { step: 1, text: "발견된 경쟁 제품과 비교하여 차별화 분석을 스트리밍 중..." } };
+
+      for await (const event of this.streamDifferentiation(idea, competitors, githubResults)) {
+        if (event.type === "progress") {
+          yield { event: "step_progress", data: { step: 1, text: `차별화 분석 스트리밍 중... (${event.text})` } };
+        } else {
+          differentiation = event.result as unknown as DifferentiationResult;
+        }
+      }
+
       // Merge results for UI
-      const mergedResult: WebSearchResult = {
-        ...competitors,
-        github_repos: githubResults.repos,
-        summary: `웹 결과 ${competitors.raw_count}개, GitHub 저장소 ${githubResults.repos.length}개 발견.`,
+      const mergedResult = {
+        web: {
+          ...competitors,
+          github_repos: githubResults.repos,
+          summary: `웹 결과 ${competitors.raw_count}개, GitHub 저장소 ${githubResults.repos.length}개 발견.`
+        },
+        github: githubResults,
+        differentiation: differentiation
       };
 
       yield { event: "step_result", data: { step: 1, result: mergedResult } };
     }
 
     // --- Step 2: Data Availability & Technical Feasibility ---
-    const dataAvailability: DataAvailabilityResult = runStep3
+    const dataAvailability: DataAvailabilityResult = runStep2
       ? await this.checkDataAndLibraries(idea)
       : fallbackDataAvailability();
 
     let feasibility: FeasibilityResult = fallbackFeasibility();
-    if (runStep3) {
+    if (runStep2) {
       yield {
         event: "step_start",
         data: {
@@ -195,35 +210,12 @@ export class IdeaAnalyzer {
       yield { event: "step_result", data: { step: 2, result: feasibility } };
     }
 
-    // --- Step 3: Differentiation ---
-    let differentiation: DifferentiationResult = fallbackDifferentiation(competitors, githubResults);
-    if (runStep4) {
+    // --- Step 3: Verdict ---
+    if (runStep3) {
       yield {
         event: "step_start",
         data: {
           step: 3,
-          title: "차별화 분석",
-          description: "기존 제품 대비 차별점을 분석하고 있습니다...",
-        },
-      };
-
-      for await (const event of this.streamDifferentiation(idea, competitors, githubResults)) {
-        if (event.type === "progress") {
-          yield { event: "step_progress", data: { step: 3, text: event.text } };
-        } else {
-          differentiation = event.result as unknown as DifferentiationResult;
-        }
-      }
-
-      yield { event: "step_result", data: { step: 3, result: differentiation } };
-    }
-
-    // --- Step 4: Verdict ---
-    if (runStep5) {
-      yield {
-        event: "step_start",
-        data: {
-          step: 4,
           title: "종합 판정",
           description: "최종 리포트를 생성하고 있습니다...",
         },
@@ -235,20 +227,20 @@ export class IdeaAnalyzer {
         {
           enabledSteps: activeSteps,
           competitors: runStep1 ? competitors : undefined,
-          githubResults: runStep1 ? githubResults : undefined, // Assuming Github is part of Step 1 now
-          feasibility: runStep3 ? feasibility : undefined,
-          differentiation: runStep4 ? differentiation : undefined,
-          dataAvailability: runStep3 ? dataAvailability : undefined,
+          githubResults: runStep1 ? githubResults : undefined,
+          feasibility: runStep2 ? feasibility : undefined,
+          differentiation: runStep1 ? differentiation : undefined,
+          dataAvailability: runStep2 ? dataAvailability : undefined,
         }
       )) {
         if (event.type === "progress") {
-          yield { event: "step_progress", data: { step: 4, text: event.text } };
+          yield { event: "step_progress", data: { step: 3, text: event.text } };
         } else {
           verdict = event.result as unknown as typeof verdict;
         }
       }
 
-      yield { event: "step_result", data: { step: 4, result: verdict } };
+      yield { event: "step_result", data: { step: 3, result: verdict } };
     }
 
     yield { event: "done", data: { message: "분석 완료" } };

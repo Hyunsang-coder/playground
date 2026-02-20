@@ -11,7 +11,8 @@ export default function CompetitorList({ data }: Props) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <span className="text-sm text-slate-500">{data.summary}</span>
+        <span className="text-sm text-slate-500">{data.
+        summary}</span>
         <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-mono text-slate-600">
           유의미 {data.raw_count}개
         </span>

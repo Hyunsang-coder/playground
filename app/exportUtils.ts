@@ -169,8 +169,6 @@ export function exportAsMarkdown(idea: string, steps: AnalysisStep[]): string {
       lines.push("");
       lines.push(`> ${data.one_liner}`);
       lines.push("");
-      lines.push(`**신뢰도:** ${data.confidence}%`);
-      lines.push("");
 
       lines.push(`### 점수 상세`);
       lines.push(`| 항목 | 점수 |`);

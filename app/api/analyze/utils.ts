@@ -90,7 +90,6 @@ export interface DifferentiationResult {
 
 export interface VerdictResult {
   verdict: string;
-  confidence: number;
   overall_score: number;
   scores: { competition: number; feasibility: number; differentiation: number; timing: number };
   one_liner: string;
@@ -196,11 +195,9 @@ export function fallbackVerdict(
   // high severity bottleneck이 있으면 GO 차단: PIVOT으로 강등
   const rawVerdict = avg >= 70 ? "GO" : avg >= 40 ? "PIVOT" : "KILL";
   const verdict = rawVerdict === "GO" && highSeverityCount >= 1 ? "PIVOT" : rawVerdict;
-  const confidence = highSeverityCount >= 2 ? Math.min(40, 60) : 40;
 
   return {
     verdict,
-    confidence,
     overall_score: avg,
     scores: {
       competition: dScore,

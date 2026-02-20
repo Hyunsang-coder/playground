@@ -75,7 +75,6 @@ export interface VerdictScores {
 
 export interface VerdictResult {
   verdict: "GO" | "PIVOT" | "KILL" | "FORK";
-  confidence: number;
   overall_score: number;
   scores: VerdictScores;
   one_liner: string;

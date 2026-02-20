@@ -109,9 +109,6 @@ export default function VerdictCard({ data, idea, onReanalyze }: Props) {
         <div className="text-center text-slate-600 animate-fade-in" style={{ animationDelay: "0.5s", animationFillMode: "both" }}>
           {data.one_liner}
         </div>
-        <div className="text-sm text-slate-400">
-          신뢰도: <span className="font-mono">{data.confidence}%</span>
-        </div>
       </div>
 
       {/* Score breakdown */}

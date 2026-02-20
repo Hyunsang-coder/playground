@@ -398,7 +398,6 @@ ${dataSummary}
 
 {
   "verdict": "GO" | "PIVOT" | "KILL" | "FORK",
-  "confidence": 0-100,
   "overall_score": 0-100,
   "scores": {
     "competition": 0-100,
@@ -420,7 +419,7 @@ ${dataSummary}
 - alternative_ideas는 각 항목을 10자 이내의 짧은 키워드/제목으로 작성하세요.
 - has_blocking_issues=true이면 verdict는 PIVOT 또는 KILL을 우선 고려하세요.
 - has_blocking_issues=true일 때 alternative_ideas에는 공식 API가 있는 대안을 포함하세요.
-- [HIGH SEVERITY 병목 규칙]: '기술 실현성'의 high severity 병목이 1개 이상이고 그 병목이 아이디어의 핵심 기능에 직결된다면, GO 판정을 내리지 마세요. 핵심 기능이 구현 가능한지 먼저 검증해야 하므로 PIVOT을 우선 고려하세요. high severity 병목이 2개 이상이면 confidence를 60 이하로 제한하세요.
+- [HIGH SEVERITY 병목 규칙]: '기술 실현성'의 high severity 병목이 1개 이상이고 그 병목이 아이디어의 핵심 기능에 직결된다면, GO 판정을 내리지 마세요. 핵심 기능이 구현 가능한지 먼저 검증해야 하므로 PIVOT을 우선 고려하세요.
 - [scores.timing 기준]: 아래 기준으로 산정하세요. (1) GitHub 유사 저장소 0개 + 웹 경쟁자 5개 미만 → 80~100 (선점 기회). (2) 기술 스택이 최근 2년 내 등장한 AI/LLM 영역 → +10. (3) 이미 레드오션이거나 시장이 포화 상태 → 20~40. (4) 그 외 → 50 기본값.`;
 }
 

@@ -117,6 +117,54 @@ export class IdeaAnalyzer {
     this.dataAvailabilityCache.set(key, { timestamp: Date.now(), result });
   }
 
+  /**
+   * Interleave multiple async generators via Promise.race.
+   * Each yielded value is tagged with its source index.
+   */
+  private async *mergeAsyncGenerators<T>(
+    generators: AsyncGenerator<T>[]
+  ): AsyncGenerator<{ index: number; value: T }> {
+    type IterEntry = {
+      index: number;
+      iterator: AsyncGenerator<T>;
+      promise: Promise<{ index: number; result: IteratorResult<T> }>;
+    };
+
+    const active: IterEntry[] = generators.map((gen, index) => {
+      const entry: IterEntry = {
+        index,
+        iterator: gen,
+        promise: gen.next().then((result) => ({ index, result })),
+      };
+      return entry;
+    });
+
+    try {
+      while (active.length > 0) {
+        const winner = await Promise.race(active.map((e) => e.promise));
+
+        if (winner.result.done) {
+          const idx = active.findIndex((e) => e.index === winner.index);
+          if (idx !== -1) active.splice(idx, 1);
+          continue;
+        }
+
+        yield { index: winner.index, value: winner.result.value };
+
+        // Re-arm the winning generator
+        const entry = active.find((e) => e.index === winner.index);
+        if (entry) {
+          entry.promise = entry.iterator
+            .next()
+            .then((result) => ({ index: entry.index, result }));
+        }
+      }
+    } finally {
+      // Cleanup all generators on early exit
+      await Promise.allSettled(active.map((e) => e.iterator.return(undefined as unknown as T)));
+    }
+  }
+
   async *analyze(
     idea: string,
     enabledSteps: number[] = [1, 2, 3]
@@ -127,11 +175,17 @@ export class IdeaAnalyzer {
     const runStep2 = shouldRun(2);
     const runStep3 = shouldRun(3);
 
+    // --- Eagerly start data availability check (only needs `idea`) ---
+    // This runs in parallel with search query generation and Step 1 searches.
+    const dataAvailabilityPromise: Promise<DataAvailabilityResult> = runStep2
+      ? this.checkDataAndLibraries(idea)
+      : Promise.resolve(fallbackDataAvailability());
+
     const searchQueries = runStep1
       ? await this.generateSearchQueries(idea)
       : { web_queries: [idea], github_queries: [idea] };
 
-    // --- Step 1: Market Research & Differentiation (Web + GitHub) ---
+    // --- Step 1: Market Research (Web + GitHub search) ---
     let competitors: WebSearchResult = {
       competitors: [],
       raw_count: 0,
@@ -167,7 +221,62 @@ export class IdeaAnalyzer {
 
       competitors = webResult;
       githubResults = ghResult;
+    }
 
+    // --- Await data availability (started earlier, should be done or nearly done) ---
+    const dataAvailability = await dataAvailabilityPromise;
+
+    // --- Parallel streaming: Differentiation (Step 1) + Feasibility (Step 2) ---
+    let feasibility: FeasibilityResult = fallbackFeasibility();
+
+    if (runStep1 && runStep2) {
+      // Both steps active → parallel stream via mergeAsyncGenerators
+      yield { event: "step_progress", data: { step: 1, text: "차별화 + 실현성 분석을 병렬 스트리밍 중..." } };
+      yield {
+        event: "step_start",
+        data: {
+          step: 2,
+          title: "기술 실현성 및 데이터 검증",
+          description: "데이터 소스 가용성과 기술적 난이도를 심층 분석 중...",
+        },
+      };
+
+      const diffGen = this.streamDifferentiation(idea, competitors, githubResults);
+      const feasGen = this.streamFeasibility(idea, dataAvailability);
+
+      for await (const tagged of this.mergeAsyncGenerators([diffGen, feasGen])) {
+        const { index, value: event } = tagged;
+
+        if (index === 0) {
+          // Differentiation stream (Step 1)
+          if (event.type === "progress") {
+            yield { event: "step_progress", data: { step: 1, text: `차별화 분석 스트리밍 중... (${event.text})` } };
+          } else {
+            differentiation = event.result as unknown as DifferentiationResult;
+            // Emit Step 1 result as soon as differentiation finishes
+            const mergedResult = {
+              web: {
+                ...competitors,
+                github_repos: githubResults.repos,
+                summary: `웹 결과 ${competitors.raw_count}개, GitHub 저장소 ${githubResults.repos.length}개 발견.`,
+              },
+              github: githubResults,
+              differentiation,
+            };
+            yield { event: "step_result", data: { step: 1, result: mergedResult } };
+          }
+        } else {
+          // Feasibility stream (Step 2)
+          if (event.type === "progress") {
+            yield { event: "step_progress", data: { step: 2, text: event.text } };
+          } else {
+            feasibility = event.result as unknown as FeasibilityResult;
+            yield { event: "step_result", data: { step: 2, result: feasibility } };
+          }
+        }
+      }
+    } else if (runStep1) {
+      // Only Step 1 → sequential differentiation
       yield { event: "step_progress", data: { step: 1, text: "발견된 경쟁 제품과 비교하여 차별화 분석을 스트리밍 중..." } };
 
       for await (const event of this.streamDifferentiation(idea, competitors, githubResults)) {
@@ -178,27 +287,18 @@ export class IdeaAnalyzer {
         }
       }
 
-      // Merge results for UI
       const mergedResult = {
         web: {
           ...competitors,
           github_repos: githubResults.repos,
-          summary: `웹 결과 ${competitors.raw_count}개, GitHub 저장소 ${githubResults.repos.length}개 발견.`
+          summary: `웹 결과 ${competitors.raw_count}개, GitHub 저장소 ${githubResults.repos.length}개 발견.`,
         },
         github: githubResults,
-        differentiation: differentiation
+        differentiation,
       };
-
       yield { event: "step_result", data: { step: 1, result: mergedResult } };
-    }
-
-    // --- Step 2: Data Availability & Technical Feasibility ---
-    const dataAvailability: DataAvailabilityResult = runStep2
-      ? await this.checkDataAndLibraries(idea)
-      : fallbackDataAvailability();
-
-    let feasibility: FeasibilityResult = fallbackFeasibility();
-    if (runStep2) {
+    } else if (runStep2) {
+      // Only Step 2 → sequential feasibility
       yield {
         event: "step_start",
         data: {
